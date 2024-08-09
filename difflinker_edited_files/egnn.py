@@ -244,7 +244,7 @@ class EGNN(nn.Module):
         if self.sin_embedding is not None:
             distances = self.sin_embedding(distances)
 
-        print("Device: ", self.device)
+        
         h = h.to(device=self.device) #@mastro moved h to device of embedding (hopefully the selected GPU)
         h = self.embedding(h) #@mastro moved h to device of embedding (hopefully the selected GPU)
         
@@ -261,6 +261,7 @@ class EGNN(nn.Module):
         h = self.embedding_out(h) #@mastro moved h to device of embedding (hopefully the selected GPU)
        
         if node_mask is not None:
+            node_mask = node_mask.to(device=self.device) #@mastro moved node_mask to device of embedding (hopefully the selected GPU)
             h = h * node_mask
         return h, x
 
@@ -363,7 +364,8 @@ class Dynamics(nn.Module):
             normalization=None, centering=False, graph_type='FC',
     ):
         super().__init__()
-        self.device = device
+        # self.device = device
+        self.device = running_device #@mastro moved device to running_device
         self.n_dims = n_dims
         self.context_node_nf = context_node_nf
         self.condition_time = condition_time
@@ -452,6 +454,8 @@ class Dynamics(nn.Module):
                 linker_mask=linker_mask,
                 edge_mask=edge_mask
             )
+            node_mask = node_mask.to(device=running_device) #@mastro moved node_mask to device
+            x = x.to(device=running_device) #@mastro moved x to device 
             vel = (x_final - x) * node_mask  # This masking operation is redundant but just in case
         elif self.model == 'gnn_dynamics':
             xh = torch.cat([x, h], dim=1)

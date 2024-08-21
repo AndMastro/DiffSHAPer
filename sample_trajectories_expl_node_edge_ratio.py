@@ -957,803 +957,810 @@ start = 0
 
 SAVE_VISUALIZATION = True
 chain_with_full_fragments = None
-M = 100 #100 #number of Monte Carlo Sampling steps
+M = 500 #100 #number of Monte Carlo Sampling steps
 P = None #probability of atom to exist in random graph (also edge in the future)
-PARALLEL_STEPS = 100
+PARALLEL_STEPS = 500
 # Create the folder if it does not exist
 folder_save_path = "results/explanations_" + args.P
 if not os.path.exists(folder_save_path):
     os.makedirs(folder_save_path)
 
+data_list = []
 for data in dataloader:
-    
     if sampled < num_samples:
-
-        smile = data["name"][0]
-        
-        mol = read_smiles(smile)
-        num_nodes = mol.number_of_nodes()
-        
-        num_edges = mol.number_of_edges()
-        num_edges_directed = num_edges*2
-        
-        
-        graph_density = num_edges_directed/(num_nodes*(num_nodes-1))
-        max_number_of_nodes = num_edges + 1
-
-        node_density = num_nodes/max_number_of_nodes
-
-        node_edge_ratio = num_nodes/num_edges
-        
-        edge_node_ratio = num_edges/num_nodes
-        print("Graph density:", graph_density)
-        print("Node density:", node_density)
-        print("Node-edge ratio:", node_edge_ratio)
-        print("Edge-node ratio:", edge_node_ratio)
-        
-        if args.P == "graph_density":
-            P = graph_density #probability of atom to exist in random graph (not sure if correct approach, this was correct for edges)
-        elif args.P == "node_density":
-            P = node_density
-        elif args.P == "node_edge_ratio" or args.P == "edge_node_ratio":
-            if node_edge_ratio < edge_node_ratio:
-                P = node_edge_ratio
-                print("Using node-edge ratio", node_edge_ratio)
-            else:
-                P = edge_node_ratio
-                print("Using edge-node ratio", edge_node_ratio)            
-        else:
-            P = 0.2
-
-        print("Using P:", args.P, P)
-
-        chain_with_full_fragments = None
+        data_list.append(data)
         sampled += 1
-        rng = default_rng(seed = SEED)
-        rng_torch = torch.Generator(device="cpu")
-        rng_torch.manual_seed(SEED)
-        # generate chain with original and full fragments
-       
-        chain_batch, node_mask = model.sample_chain(data, keep_frames=args.keep_frames)
-        
-        #get the generated molecule and store it in a variable
-        chain_with_full_fragments = chain_batch[0, :, :, :] #need to get only the final frame, is 0 ok in the first dimension?
-        # print("Chain with full fragments shape:", chain_with_full_fragments.shape)
-        # sys.exit()
-        # Compute distance of two chains
-        mol_similarity = compute_molecular_similarity(chain_with_full_fragments.squeeze(), chain_with_full_fragments.squeeze(), mask1=data["linker_mask"][0].squeeze(), mask2=data["linker_mask"][0].squeeze())
-        print("Similarity between the two chains:", mol_similarity.item())
-        #compute molecular distance using batches
-        original_linker_mask_batch = data["linker_mask"][0].squeeze().repeat(PARALLEL_STEPS, 1) #check why it works
-        
-        mol_distance = compute_molecular_distance_batch(chain_with_full_fragments, chain_with_full_fragments, mask1=original_linker_mask_batch, mask2=original_linker_mask_batch)
-        print("Molecular distance using batches: ", mol_distance)
-        
-        # compute similarity of one-hot vectors
-        positional_similarity = compute_molecular_similarity_positions(chain_with_full_fragments.squeeze(), chain_with_full_fragments.squeeze(), mask1=data["linker_mask"][0].squeeze(), mask2=data["linker_mask"][0].squeeze())
-        print("Similarity between the two chains based on positions:", positional_similarity.item())
-        one_hot_similarity = compute_one_hot_similarity(chain_with_full_fragments.squeeze(), chain_with_full_fragments.squeeze(), mask1=data["linker_mask"][0].squeeze(), mask2=data["linker_mask"][0].squeeze())
-        print("Similarity between the two one-hot vectors:", one_hot_similarity.item())
-        # compute cosine similarity
-        cos_simil = compute_cosine_similarity(chain_with_full_fragments.squeeze().cpu(), chain_with_full_fragments.squeeze().cpu(), mask1=data["linker_mask"][0].squeeze().cpu(), mask2=data["linker_mask"][0].squeeze().cpu())
-        print("Cosine similarity between the two chains:", cos_simil)
-        cos_simil_batch = compute_cosine_similarity_batch(chain_with_full_fragments.cpu(), chain_with_full_fragments.cpu(), mask1=original_linker_mask_batch.cpu(), mask2=original_linker_mask_batch.cpu())
-        print("Cosine similarity between the two chains using batches:", cos_simil_batch)
-        
-        
-        
-        # display(data["fragment_mask"])
-        # display(data["fragment_mask"].shape)
 
-        # display(data["linker_mask"])
-        # display(data["linker_mask"].shape)
-        
-        # display(data["edge_mask"])
-        # display(data["edge_mask"].shape)
 
-        #mask out all edges that are not bonds
-        # idx2atom = const.GEOM_IDX2ATOM if model.is_geom else const.IDX2ATOM
-      
-        # positions = data["positions"][0].detach().cpu().numpy()
-        # x  = positions[:,0]
-        # y  = positions[:,1]
-        # z  = positions[:,2]
-        # # print(x)
-       
-        # atom_type = torch.argmax(data["one_hot"][0], dim=1)
-        # print("Number of edges", len(x) * len(x))
-        # sys.exit()
-        #uncomment to work on edge_mask (not huge effect, tho)
-        # for i in range(len(x)):
-        #     for j in range(i+1, len(x)):
-        #         p1 = np.array([x[i], y[i], z[i]])
-        #         p2 = np.array([x[j], y[j], z[j]])
-        #         dist =  np.sqrt(np.sum((p1 - p2) ** 2)) #np.linalg.norm(p1-p2)
-                
-        #         atom1, atom2 = idx2atom[atom_type[i].item()], idx2atom[atom_type[j].item()]
-        #         bond_order = get_bond_order(atom1, atom2, dist)
-                
-        #         bond_order_dict[bond_order] += 1
-        #         # if bond_order <= 0: #TODO debug. Why not all set to 0?
-        #         if True:
-        #             data["edge_mask"][i * len(x) + j] = 0
-        #             data["edge_mask"][j * len(x) + i] = 0
-        #         #set all edge_mask indices to 0
-        #         data["edge_mask"] = torch.zeros_like(data["edge_mask"])
+for data_index, data in enumerate(tqdm(data_list)):
+    
+    
 
-        #randomly mask out 50% of atoms
-        # mask = torch.rand(data["atom_mask"].shape) > 0.5
-        # data["atom_mask"] = data["atom_mask"] * mask.to(model.device)
-        #mask out all atoms
-        # data["atom_mask"] = torch.zeros_like(data["atom_mask"])
-        
-        #variables that will become function/class arguments/variables
+    smile = data["name"][0]
+    
+    mol = read_smiles(smile)
+    num_nodes = mol.number_of_nodes()
+    
+    num_edges = mol.number_of_edges()
+    num_edges_directed = num_edges*2
+    
+    
+    graph_density = num_edges_directed/(num_nodes*(num_nodes-1))
+    max_number_of_nodes = num_edges + 1
 
-        
-        num_fragment_atoms = torch.sum(data["fragment_mask"] == 1)
+    node_density = num_nodes/max_number_of_nodes
 
-        
-        phi_atoms = {}
-        
-        
-        num_atoms = data["positions"].shape[1]
-        num_linker_atoms = torch.sum(data["linker_mask"] == 1)
-        
-        distances_random_samples = []
-        cosine_similarities_random_samples = []
+    node_edge_ratio = num_nodes/num_edges
+    
+    edge_node_ratio = num_edges/num_nodes
+    print("Graph density:", graph_density)
+    print("Node density:", node_density)
+    print("Node-edge ratio:", node_edge_ratio)
+    print("Edge-node ratio:", edge_node_ratio)
+    
+    if args.P == "graph_density":
+        P = graph_density #probability of atom to exist in random graph (not sure if correct approach, this was correct for edges)
+    elif args.P == "node_density":
+        P = node_density
+    elif args.P == "node_edge_ratio" or args.P == "edge_node_ratio":
+        if node_edge_ratio < edge_node_ratio:
+            P = node_edge_ratio
+            print("Using node-edge ratio", node_edge_ratio)
+        else:
+            P = edge_node_ratio
+            print("Using edge-node ratio", edge_node_ratio)            
+    else:
+        P = 0.2
 
-        
-        
+    print("Using P:", args.P, P)
 
-        for j in tqdm(range(num_fragment_atoms)): 
+    chain_with_full_fragments = None
+    
+    rng = default_rng(seed = SEED)
+    rng_torch = torch.Generator(device="cpu")
+    rng_torch.manual_seed(SEED)
+    # generate chain with original and full fragments
+    
+    chain_batch, node_mask = model.sample_chain(data, keep_frames=args.keep_frames)
+    
+    #get the generated molecule and store it in a variable
+    chain_with_full_fragments = chain_batch[0, :, :, :] #need to get only the final frame, is 0 ok in the first dimension?
+    # print("Chain with full fragments shape:", chain_with_full_fragments.shape)
+    # sys.exit()
+    # Compute distance of two chains
+    mol_similarity = compute_molecular_similarity(chain_with_full_fragments.squeeze(), chain_with_full_fragments.squeeze(), mask1=data["linker_mask"][0].squeeze(), mask2=data["linker_mask"][0].squeeze())
+    print("Similarity between the two chains:", mol_similarity.item())
+    #compute molecular distance using batches
+    original_linker_mask_batch = data["linker_mask"][0].squeeze().repeat(PARALLEL_STEPS, 1) #check why it works
+    
+    mol_distance = compute_molecular_distance_batch(chain_with_full_fragments, chain_with_full_fragments, mask1=original_linker_mask_batch, mask2=original_linker_mask_batch)
+    print("Molecular distance using batches: ", mol_distance)
+    
+    # compute similarity of one-hot vectors
+    positional_similarity = compute_molecular_similarity_positions(chain_with_full_fragments.squeeze(), chain_with_full_fragments.squeeze(), mask1=data["linker_mask"][0].squeeze(), mask2=data["linker_mask"][0].squeeze())
+    print("Similarity between the two chains based on positions:", positional_similarity.item())
+    one_hot_similarity = compute_one_hot_similarity(chain_with_full_fragments.squeeze(), chain_with_full_fragments.squeeze(), mask1=data["linker_mask"][0].squeeze(), mask2=data["linker_mask"][0].squeeze())
+    print("Similarity between the two one-hot vectors:", one_hot_similarity.item())
+    # compute cosine similarity
+    cos_simil = compute_cosine_similarity(chain_with_full_fragments.squeeze().cpu(), chain_with_full_fragments.squeeze().cpu(), mask1=data["linker_mask"][0].squeeze().cpu(), mask2=data["linker_mask"][0].squeeze().cpu())
+    print("Cosine similarity between the two chains:", cos_simil)
+    cos_simil_batch = compute_cosine_similarity_batch(chain_with_full_fragments.cpu(), chain_with_full_fragments.cpu(), mask1=original_linker_mask_batch.cpu(), mask2=original_linker_mask_batch.cpu())
+    print("Cosine similarity between the two chains using batches:", cos_simil_batch)
+    
+    
+    
+    # display(data["fragment_mask"])
+    # display(data["fragment_mask"].shape)
+
+    # display(data["linker_mask"])
+    # display(data["linker_mask"].shape)
+    
+    # display(data["edge_mask"])
+    # display(data["edge_mask"].shape)
+
+    #mask out all edges that are not bonds
+    # idx2atom = const.GEOM_IDX2ATOM if model.is_geom else const.IDX2ATOM
+    
+    # positions = data["positions"][0].detach().cpu().numpy()
+    # x  = positions[:,0]
+    # y  = positions[:,1]
+    # z  = positions[:,2]
+    # # print(x)
+    
+    # atom_type = torch.argmax(data["one_hot"][0], dim=1)
+    # print("Number of edges", len(x) * len(x))
+    # sys.exit()
+    #uncomment to work on edge_mask (not huge effect, tho)
+    # for i in range(len(x)):
+    #     for j in range(i+1, len(x)):
+    #         p1 = np.array([x[i], y[i], z[i]])
+    #         p2 = np.array([x[j], y[j], z[j]])
+    #         dist =  np.sqrt(np.sum((p1 - p2) ** 2)) #np.linalg.norm(p1-p2)
             
-            marginal_contrib_distance = 0
-            marginal_contrib_cosine_similarity = 0
-            marginal_contrib_hausdorff = 0
+    #         atom1, atom2 = idx2atom[atom_type[i].item()], idx2atom[atom_type[j].item()]
+    #         bond_order = get_bond_order(atom1, atom2, dist)
+            
+    #         bond_order_dict[bond_order] += 1
+    #         # if bond_order <= 0: #TODO debug. Why not all set to 0?
+    #         if True:
+    #             data["edge_mask"][i * len(x) + j] = 0
+    #             data["edge_mask"][j * len(x) + i] = 0
+    #         #set all edge_mask indices to 0
+    #         data["edge_mask"] = torch.zeros_like(data["edge_mask"])
 
-            for step in tqdm(range(int(M/PARALLEL_STEPS))):
+    #randomly mask out 50% of atoms
+    # mask = torch.rand(data["atom_mask"].shape) > 0.5
+    # data["atom_mask"] = data["atom_mask"] * mask.to(model.device)
+    #mask out all atoms
+    # data["atom_mask"] = torch.zeros_like(data["atom_mask"])
+    
+    #variables that will become function/class arguments/variables
 
-                fragment_indices = torch.where(data["fragment_mask"] == 1)[1]
-                num_fragment_atoms = len(fragment_indices)
-                fragment_indices = fragment_indices.repeat(PARALLEL_STEPS).to(args.device)
+    
+    num_fragment_atoms = torch.sum(data["fragment_mask"] == 1)
 
-                data_j_plus = data.copy()
-                data_j_minus = data.copy()
-                data_random = data.copy()
+    
+    phi_atoms = {}
+    
+    
+    num_atoms = data["positions"].shape[1]
+    num_linker_atoms = torch.sum(data["linker_mask"] == 1)
+    
+    distances_random_samples = []
+    cosine_similarities_random_samples = []
 
-                N_z_mask = torch.tensor(np.array([rng.binomial(1, P, size = num_fragment_atoms) for _ in range(PARALLEL_STEPS)]), dtype=torch.int32)
-                # Ensure at least one element is 1, otherwise randomly select one since at least one fragment atom must be present
-                # print(N_z_mask)
+    
+    
+
+    for j in tqdm(range(num_fragment_atoms)): 
+        
+        marginal_contrib_distance = 0
+        marginal_contrib_cosine_similarity = 0
+        marginal_contrib_hausdorff = 0
+
+        for step in tqdm(range(int(M/PARALLEL_STEPS))):
+
+            fragment_indices = torch.where(data["fragment_mask"] == 1)[1]
+            num_fragment_atoms = len(fragment_indices)
+            fragment_indices = fragment_indices.repeat(PARALLEL_STEPS).to(args.device)
+
+            data_j_plus = data.copy()
+            data_j_minus = data.copy()
+            data_random = data.copy()
+
+            N_z_mask = torch.tensor(np.array([rng.binomial(1, P, size = num_fragment_atoms) for _ in range(PARALLEL_STEPS)]), dtype=torch.int32)
+            # Ensure at least one element is 1, otherwise randomly select one since at least one fragment atom must be present
+            # print(N_z_mask)
+            
+            
+            for i in range(len(N_z_mask)):
+                # print(mask.shape)
                 
-                
-                for i in range(len(N_z_mask)):
-                    # print(mask.shape)
+                if not N_z_mask[i].any():
                     
-                    if not N_z_mask[i].any():
-                        
-                        print("Zero elements in mask, randomly selecting one.")
-                        random_index = rng.integers(0, num_fragment_atoms)
-                        N_z_mask[i][random_index] = 1
-                       
-                
-                N_z_mask=N_z_mask.flatten().to(args.device)
-                
-                
-                # print("N_z_mask for sample", sampled, step, N_z_mask)
-
-                N_mask = torch.ones(PARALLEL_STEPS * num_fragment_atoms, dtype=torch.int32, device=args.device)
-
-                pi = torch.cat([torch.randperm(num_fragment_atoms, generator=rng_torch) for _ in range(PARALLEL_STEPS)], dim=0)
-
-                N_j_plus_index = torch.ones(PARALLEL_STEPS*num_fragment_atoms, dtype=torch.int, device=args.device)
-                N_j_minus_index = torch.ones(PARALLEL_STEPS*num_fragment_atoms, dtype=torch.int, device=args.device)
-
-                selected_node_index = np.where(pi == j)
-                selected_node_index = torch.tensor(np.array(selected_node_index), device=args.device).squeeze()
-                selected_node_index = selected_node_index.repeat_interleave(num_fragment_atoms) #@mastro TO BE CHECKED IF THIS IS CORRECT
-                # print("Selected node index", selected_node_index)
-                k_values = torch.arange(num_fragment_atoms*PARALLEL_STEPS, device=args.device)
-
-                add_to_pi = torch.arange(start=0, end=PARALLEL_STEPS*num_fragment_atoms, step=num_fragment_atoms).repeat_interleave(num_fragment_atoms) #check if it is correct ot consider num_fragment_atoms and not num_atoms
-
-                pi_add = pi + add_to_pi
-                pi_add = pi_add.to(device=args.device)
-                #this must be cafeully checked. this should be adapted for nodes
-                add_to_node_index = torch.arange(start=0, end=PARALLEL_STEPS*num_atoms, step=num_atoms) #@mastro change step from num_fragment_atoms to num_atoms
-                
-                add_to_node_index = add_to_node_index.repeat_interleave(num_fragment_atoms).to(args.device) #changed from num_atoms to num_fragment_atoms
-
-                
-                # print("Selected node index", selected_node_index)
-                # add_to_node_index = add_to_node_index.repeat(2,1).to(args.device) #this is probalby not needed with nodes, to be checked
-
-                
-                
-                N_j_plus_index[pi_add] = torch.where(k_values <= selected_node_index, N_mask[pi_add], N_z_mask[pi_add])
-                N_j_minus_index[pi_add] = torch.where(k_values < selected_node_index, N_mask[pi_add], N_z_mask[pi_add]) 
-
-                # if torch.all(N_j_plus_index == N_j_minus_index):
-                #     print("N_j_plus_index and N_j_minus_index are the same")
-                # else:
-                #     print("N_j_plus_index and N_j_minus_index are different")
-
-                # retained_indices_plus = torch.nonzero(N_j_plus_index).flatten()
-                # retained_indices_minus = torch.nonzero(N_j_minus_index).flatten()
-                # print("Retained indices plus", retained_indices_plus)
-                # print("Retained indices minus", retained_indices_minus)
-                #this must be debugged
-                # N_j_plus = torch.index_select(fragment_indices + add_to_node_index, 0, index = retained_indices_plus) #fragements to keep in molecule j plus
-                fragment_indices = fragment_indices + add_to_node_index
-                
-                
-                N_j_plus = fragment_indices[(N_j_plus_index==1)] #fragement to keep in molecule j plus
-                # print("N_j_plus", N_j_plus)
-                # print("N_j_plus shape", N_j_plus.shape)
-                
-                # N_j_minus = torch.index_select(fragment_indices +  add_to_node_index, 0, index = retained_indices_minus) #fragement indices to keep in molecule j minus
-                # N_j_minus = fragment_indices[N_j_minus_index] #fragement indices to keep in molecule j minus
-               
-                N_j_minus = fragment_indices[(N_j_minus_index==1)] #it is ok. it contains fragmens indices to keep in molecule j minus (indices that index the atom nodes)
-
-                # print("N_j_plus_index", N_j_plus_index)
-                # print("N_j_minus_index", N_j_minus_index)
-                # print(torch.all(N_j_plus_index == N_j_minus_index))
-                # print("fragment_indices", fragment_indices)
-                # print("N_j_plus", N_j_plus)
-                # print("N_j_minus", N_j_minus)
-                # print("N_j_plus shape", N_j_plus.shape)
-                # print("N_j_minus shape", N_j_minus.shape)
-                # if torch.all(N_j_plus == N_j_minus):
-                #     print("N_j_plus and N_j_minus are the same")
-                # else:
-                #     print("N_j_plus and N_j_minus are different")
-                
-                # N_random_sample = fragment_indices[torch.IntTensor(N_z_mask)] #fragement indices to keep in random molecule
-                # N_random_sample = torch.index_select(fragment_indices + add_to_node_index, 0, index = N_z_mask) #fragement indices to keep in random molecule
-                N_random_sample = fragment_indices[(N_z_mask==1)] #fragement indices to keep in random molecule
-                
-                
-                # print("N_j_plus", N_j_plus)
-                # print("N_j_minus", N_j_minus)
-                # print("N random sample", N_random_sample)
-                # print("N_j_plus shape", N_j_plus.shape)
-                # print("N_j_minus shape", N_j_minus.shape)
-                # print("N random sample shape", N_random_sample.shape)
-
-                atom_mask_j_plus = torch.zeros(num_atoms*PARALLEL_STEPS, dtype=torch.bool)
-                atom_mask_j_minus = torch.zeros(num_atoms*PARALLEL_STEPS, dtype=torch.bool)
-                atom_mask_random_molecule = torch.zeros(num_atoms*PARALLEL_STEPS, dtype=torch.bool)
-
+                    print("Zero elements in mask, randomly selecting one.")
+                    random_index = rng.integers(0, num_fragment_atoms)
+                    N_z_mask[i][random_index] = 1
                     
-                atom_mask_j_plus[N_j_plus] = True
+            
+            N_z_mask=N_z_mask.flatten().to(args.device)
+            
+            
+            # print("N_z_mask for sample", sampled, step, N_z_mask)
+
+            N_mask = torch.ones(PARALLEL_STEPS * num_fragment_atoms, dtype=torch.int32, device=args.device)
+
+            pi = torch.cat([torch.randperm(num_fragment_atoms, generator=rng_torch) for _ in range(PARALLEL_STEPS)], dim=0)
+
+            N_j_plus_index = torch.ones(PARALLEL_STEPS*num_fragment_atoms, dtype=torch.int, device=args.device)
+            N_j_minus_index = torch.ones(PARALLEL_STEPS*num_fragment_atoms, dtype=torch.int, device=args.device)
+
+            selected_node_index = np.where(pi == j)
+            selected_node_index = torch.tensor(np.array(selected_node_index), device=args.device).squeeze()
+            selected_node_index = selected_node_index.repeat_interleave(num_fragment_atoms) #@mastro TO BE CHECKED IF THIS IS CORRECT
+            # print("Selected node index", selected_node_index)
+            k_values = torch.arange(num_fragment_atoms*PARALLEL_STEPS, device=args.device)
+
+            add_to_pi = torch.arange(start=0, end=PARALLEL_STEPS*num_fragment_atoms, step=num_fragment_atoms).repeat_interleave(num_fragment_atoms) #check if it is correct ot consider num_fragment_atoms and not num_atoms
+
+            pi_add = pi + add_to_pi
+            pi_add = pi_add.to(device=args.device)
+            #this must be cafeully checked. this should be adapted for nodes
+            add_to_node_index = torch.arange(start=0, end=PARALLEL_STEPS*num_atoms, step=num_atoms) #@mastro change step from num_fragment_atoms to num_atoms
+            
+            add_to_node_index = add_to_node_index.repeat_interleave(num_fragment_atoms).to(args.device) #changed from num_atoms to num_fragment_atoms
+
+            
+            # print("Selected node index", selected_node_index)
+            # add_to_node_index = add_to_node_index.repeat(2,1).to(args.device) #this is probalby not needed with nodes, to be checked
+
+            
+            
+            N_j_plus_index[pi_add] = torch.where(k_values <= selected_node_index, N_mask[pi_add], N_z_mask[pi_add])
+            N_j_minus_index[pi_add] = torch.where(k_values < selected_node_index, N_mask[pi_add], N_z_mask[pi_add]) 
+
+            # if torch.all(N_j_plus_index == N_j_minus_index):
+            #     print("N_j_plus_index and N_j_minus_index are the same")
+            # else:
+            #     print("N_j_plus_index and N_j_minus_index are different")
+
+            # retained_indices_plus = torch.nonzero(N_j_plus_index).flatten()
+            # retained_indices_minus = torch.nonzero(N_j_minus_index).flatten()
+            # print("Retained indices plus", retained_indices_plus)
+            # print("Retained indices minus", retained_indices_minus)
+            #this must be debugged
+            # N_j_plus = torch.index_select(fragment_indices + add_to_node_index, 0, index = retained_indices_plus) #fragements to keep in molecule j plus
+            fragment_indices = fragment_indices + add_to_node_index
+            
+            
+            N_j_plus = fragment_indices[(N_j_plus_index==1)] #fragement to keep in molecule j plus
+            # print("N_j_plus", N_j_plus)
+            # print("N_j_plus shape", N_j_plus.shape)
+            
+            # N_j_minus = torch.index_select(fragment_indices +  add_to_node_index, 0, index = retained_indices_minus) #fragement indices to keep in molecule j minus
+            # N_j_minus = fragment_indices[N_j_minus_index] #fragement indices to keep in molecule j minus
+            
+            N_j_minus = fragment_indices[(N_j_minus_index==1)] #it is ok. it contains fragmens indices to keep in molecule j minus (indices that index the atom nodes)
+
+            # print("N_j_plus_index", N_j_plus_index)
+            # print("N_j_minus_index", N_j_minus_index)
+            # print(torch.all(N_j_plus_index == N_j_minus_index))
+            # print("fragment_indices", fragment_indices)
+            # print("N_j_plus", N_j_plus)
+            # print("N_j_minus", N_j_minus)
+            # print("N_j_plus shape", N_j_plus.shape)
+            # print("N_j_minus shape", N_j_minus.shape)
+            # if torch.all(N_j_plus == N_j_minus):
+            #     print("N_j_plus and N_j_minus are the same")
+            # else:
+            #     print("N_j_plus and N_j_minus are different")
+            
+            # N_random_sample = fragment_indices[torch.IntTensor(N_z_mask)] #fragement indices to keep in random molecule
+            # N_random_sample = torch.index_select(fragment_indices + add_to_node_index, 0, index = N_z_mask) #fragement indices to keep in random molecule
+            N_random_sample = fragment_indices[(N_z_mask==1)] #fragement indices to keep in random molecule
+            
+            
+            # print("N_j_plus", N_j_plus)
+            # print("N_j_minus", N_j_minus)
+            # print("N random sample", N_random_sample)
+            # print("N_j_plus shape", N_j_plus.shape)
+            # print("N_j_minus shape", N_j_minus.shape)
+            # print("N random sample shape", N_random_sample.shape)
+
+            atom_mask_j_plus = torch.zeros(num_atoms*PARALLEL_STEPS, dtype=torch.bool)
+            atom_mask_j_minus = torch.zeros(num_atoms*PARALLEL_STEPS, dtype=torch.bool)
+            atom_mask_random_molecule = torch.zeros(num_atoms*PARALLEL_STEPS, dtype=torch.bool)
+
                 
-                atom_mask_j_minus[N_j_minus] = True
+            atom_mask_j_plus[N_j_plus] = True
+            
+            atom_mask_j_minus[N_j_minus] = True
 
-                # print("Atom mask j plus", atom_mask_j_plus)
-                # print("Atom mask j minus", atom_mask_j_minus)
+            # print("Atom mask j plus", atom_mask_j_plus)
+            # print("Atom mask j minus", atom_mask_j_minus)
 
-                #set to true also linker atoms
-                parallelized_linker_mask = data["linker_mask"][0].squeeze().to(torch.int).repeat(PARALLEL_STEPS)
-                atom_mask_j_plus[(parallelized_linker_mask == 1)] = True #COMMENTED FOR DEBUGGING
-                # atom_mask_j_plus = atom_mask_j_plus.repeat(PARALLEL_STEPS, 1) ##@mastro TO BE CHECKED
+            #set to true also linker atoms
+            parallelized_linker_mask = data["linker_mask"][0].squeeze().to(torch.int).repeat(PARALLEL_STEPS)
+            atom_mask_j_plus[(parallelized_linker_mask == 1)] = True #COMMENTED FOR DEBUGGING
+            # atom_mask_j_plus = atom_mask_j_plus.repeat(PARALLEL_STEPS, 1) ##@mastro TO BE CHECKED
 
+            
+            #set to true also linker atoms
+            atom_mask_j_minus[(parallelized_linker_mask == 1)] = True #COMMENTED FOR DEBUGGING
+
+            # atom_mask_j_minus = atom_mask_j_minus.repeat(PARALLEL_STEPS, 1) ##@mastro TO BE CHECKED
+
+            atom_mask_random_molecule[N_random_sample] = True
+            #set to true also linker atoms
+            atom_mask_random_molecule[(parallelized_linker_mask == 1)] = True
+            # atom_mask_random_molecule = atom_mask_random_molecule.repeat(PARALLEL_STEPS, 1) ##@mastro TO BE CHECKED
+            # print("Atom mask j plus", atom_mask_j_plus)
+            # print("Atom mask j minus", atom_mask_j_minus)
+            # print("Atom mask random molecule", atom_mask_random_molecule)
+            # print("Atom mask j plus shape", atom_mask_j_plus.shape)
+            # print("Atom mask j minus shape", atom_mask_j_minus.shape)
+            # print("Atom mask random molecule shape", atom_mask_random_molecule.shape)
+            # print("parallelized_linker_mask", parallelized_linker_mask)
+            # print("parallelized_linker_mask shape", parallelized_linker_mask.shape)
+            
+            # if torch.all(atom_mask_j_plus == atom_mask_j_minus):
+            #     print("atom_mask_j_plus and atom_mask_j_minus are the same")
+            # else:
+            #     print("atom_mask_j_plus and atom_mask_j_minus are different")
+            
+            # print("All SEEMS fine up to here")
+            #for sample containing j
+            #remove positions of atoms in random_indices
+
+            atom_mask_j_plus = atom_mask_j_plus.view(PARALLEL_STEPS, num_atoms)
+            
+            atom_mask_j_minus = atom_mask_j_minus.view(PARALLEL_STEPS, num_atoms)
+            atom_mask_random_molecule = atom_mask_random_molecule.view(PARALLEL_STEPS, num_atoms)
+            
+            # print("Atom mask j plus", atom_mask_j_plus)
+            # print("Atom mask j plus shape", atom_mask_j_plus.shape)
+            data_j_plus_dict = {}
+            data_j_minus_dict = {}
+            data_random_dict = {}
+
+            for i in range(PARALLEL_STEPS):
+                data_j_plus_dict[i] = data.copy()
+                data_j_minus_dict[i] = data.copy()
+                data_random_dict[i] = data.copy()
+
+                #data j plus
+                data_j_plus_dict[i]["positions"] = data_j_plus_dict[i]["positions"][:, atom_mask_j_plus[i]]
+                data_j_plus_dict[i]["num_atoms"] = data_j_plus_dict[i]["positions"].shape[1]
+                # remove one_hot of atoms in random_indices
+                data_j_plus_dict[i]["one_hot"] = data_j_plus_dict[i]["one_hot"][:, atom_mask_j_plus[i]]
+                # remove atom_mask of atoms in random_indices
+                data_j_plus_dict[i]["atom_mask"] = data_j_plus_dict[i]["atom_mask"][:, atom_mask_j_plus[i]]
+                # remove fragment_mask of atoms in random_indices
+                data_j_plus_dict[i]["fragment_mask"] = data_j_plus_dict[i]["fragment_mask"][:, atom_mask_j_plus[i]]
+                # remove linker_mask of atoms in random_indices
+                data_j_plus_dict[i]["linker_mask"] = data_j_plus_dict[i]["linker_mask"][:, atom_mask_j_plus[i]]
+                data_j_plus_dict[i]["charges"] = data_j_plus_dict[i]["charges"][:, atom_mask_j_plus[i]]
+                data_j_plus_dict[i]["anchors"] = data_j_plus_dict[i]["anchors"][:, atom_mask_j_plus[i]]
+                # remove edge_mask of atoms in random_indices
+                # print("Shape of edge_mask:", data_j_plus_dict[i]["edge_mask"].shape)
+                # print("Shape of atom_mask_j_plus[i]:", atom_mask_j_plus[i].shape)
+                # print("Shape of atom_mask_j_plus[i].unsqueeze(1):", atom_mask_j_plus[i].unsqueeze(1).shape)
+                # print("Shape of atom_mask_j_plus[i].unsqueeze(1) * atom_mask_j_plus[i]:", (atom_mask_j_plus[i].unsqueeze(1) * atom_mask_j_plus[i]).shape)
                 
-                #set to true also linker atoms
-                atom_mask_j_minus[(parallelized_linker_mask == 1)] = True #COMMENTED FOR DEBUGGING
+                edge_mask_to_keep = (atom_mask_j_plus[i].unsqueeze(1) * atom_mask_j_plus[i]).flatten()
 
-                # atom_mask_j_minus = atom_mask_j_minus.repeat(PARALLEL_STEPS, 1) ##@mastro TO BE CHECKED
+                # print("Edge mask to keep shape:", edge_mask_to_keep.shape)
+                data_j_plus_dict[i]["edge_mask"] = data_j_plus_dict[i]["edge_mask"][edge_mask_to_keep]
 
-                atom_mask_random_molecule[N_random_sample] = True
-                #set to true also linker atoms
-                atom_mask_random_molecule[(parallelized_linker_mask == 1)] = True
-                # atom_mask_random_molecule = atom_mask_random_molecule.repeat(PARALLEL_STEPS, 1) ##@mastro TO BE CHECKED
-                # print("Atom mask j plus", atom_mask_j_plus)
-                # print("Atom mask j minus", atom_mask_j_minus)
-                # print("Atom mask random molecule", atom_mask_random_molecule)
-                # print("Atom mask j plus shape", atom_mask_j_plus.shape)
-                # print("Atom mask j minus shape", atom_mask_j_minus.shape)
-                # print("Atom mask random molecule shape", atom_mask_random_molecule.shape)
-                # print("parallelized_linker_mask", parallelized_linker_mask)
-                # print("parallelized_linker_mask shape", parallelized_linker_mask.shape)
-                
-                # if torch.all(atom_mask_j_plus == atom_mask_j_minus):
-                #     print("atom_mask_j_plus and atom_mask_j_minus are the same")
-                # else:
-                #     print("atom_mask_j_plus and atom_mask_j_minus are different")
-                
-                # print("All SEEMS fine up to here")
-                #for sample containing j
-                #remove positions of atoms in random_indices
+                # for index in N_j_plus:
+                #     for j in range(num_atoms):
+                #         data_j_plus_dict[i]["edge_mask"][index * num_atoms + j] = 0
+                #         data_j_plus_dict[i]["edge_mask"][j * num_atoms + index] = 0
+                # data_j_plus_dict[i]["edge_mask"] = data_j_plus_dict[i]["edge_mask"][data_j_plus_dict[i]["edge_mask"] != 0]
 
-                atom_mask_j_plus = atom_mask_j_plus.view(PARALLEL_STEPS, num_atoms)
-                
-                atom_mask_j_minus = atom_mask_j_minus.view(PARALLEL_STEPS, num_atoms)
-                atom_mask_random_molecule = atom_mask_random_molecule.view(PARALLEL_STEPS, num_atoms)
-                
-                # print("Atom mask j plus", atom_mask_j_plus)
-                # print("Atom mask j plus shape", atom_mask_j_plus.shape)
-                data_j_plus_dict = {}
-                data_j_minus_dict = {}
-                data_random_dict = {}
+                #data j minus
+                data_j_minus_dict[i]["positions"] = data_j_minus_dict[i]["positions"][:, atom_mask_j_minus[i]]
+                data_j_minus_dict[i]["num_atoms"] = data_j_minus_dict[i]["positions"].shape[1]
+                # remove one_hot of atoms in random_indices
+                data_j_minus_dict[i]["one_hot"] = data_j_minus_dict[i]["one_hot"][:, atom_mask_j_minus[i]]
+                # remove atom_mask of atoms in random_indices
+                data_j_minus_dict[i]["atom_mask"] = data_j_minus_dict[i]["atom_mask"][:, atom_mask_j_minus[i]]
+                # remove fragment_mask of atoms in random_indices
+                data_j_minus_dict[i]["fragment_mask"] = data_j_minus_dict[i]["fragment_mask"][:, atom_mask_j_minus[i]]
+                # remove linker_mask of atoms in random_indices
+                data_j_minus_dict[i]["linker_mask"] = data_j_minus_dict[i]["linker_mask"][:, atom_mask_j_minus[i]]
+                data_j_minus_dict[i]["charges"] = data_j_minus_dict[i]["charges"][:, atom_mask_j_minus[i]]
+                data_j_minus_dict[i]["anchors"] = data_j_minus_dict[i]["anchors"][:, atom_mask_j_minus[i]]
+                # remove edge_mask of atoms in random_indices
+                edge_mask_to_keep = (atom_mask_j_minus[i].unsqueeze(1) * atom_mask_j_minus[i]).flatten() 
+                data_j_minus_dict[i]["edge_mask"] = data_j_minus_dict[i]["edge_mask"][edge_mask_to_keep]
 
+                #data random
+                data_random_dict[i]["positions"] = data_random_dict[i]["positions"][:, atom_mask_random_molecule[i]]
+                data_random_dict[i]["num_atoms"] = data_random_dict[i]["positions"].shape[1]
+                # remove one_hot of atoms in random_indices
+                data_random_dict[i]["one_hot"] = data_random_dict[i]["one_hot"][:, atom_mask_random_molecule[i]]
+                # remove atom_mask of atoms in random_indices
+                data_random_dict[i]["atom_mask"] = data_random_dict[i]["atom_mask"][:, atom_mask_random_molecule[i]]
+                # remove fragment_mask of atoms in random_indices
+                data_random_dict[i]["fragment_mask"] = data_random_dict[i]["fragment_mask"][:, atom_mask_random_molecule[i]]
+                # remove linker_mask of atoms in random_indices
+                data_random_dict[i]["linker_mask"] = data_random_dict[i]["linker_mask"][:, atom_mask_random_molecule[i]]
+                data_random_dict[i]["charges"] = data_random_dict[i]["charges"][:, atom_mask_random_molecule[i]]
+                data_random_dict[i]["anchors"] = data_random_dict[i]["anchors"][:, atom_mask_random_molecule[i]]
+                # remove edge_mask of atoms in random_indices
+                # remove edge_mask of atoms in random_indices
+                edge_mask_to_keep = (atom_mask_random_molecule[i].unsqueeze(1) * atom_mask_random_molecule[i]).flatten() 
+
+                data_random_dict[i]["edge_mask"] = data_random_dict[i]["edge_mask"][edge_mask_to_keep]
+
+
+            
+
+            # print("DEBUG UP TO HERE")
+            # sys.exit()
+            # print("After removal j plus:", data_j_plus["positions"])
+            # print(data_j_plus["positions"].shape)
+            
+            #generation step
+
+            
+
+            # print("Max atoms j plus", max_atoms_j_plus)
+            # print("Max atoms j minus", max_atoms_j_minus)
+            # print("Max atoms random", max_atoms_random)
+            
+            
+            PADDING = True
+        
+            if PADDING:
+
+                max_atoms_j_plus = max(data_j_plus_dict[i]["num_atoms"] for i in range(PARALLEL_STEPS))
+
+                max_edges_j_plus = max(data_j_plus_dict[i]["edge_mask"].shape[0] for i in range(PARALLEL_STEPS))
+                
+                
+                max_atoms_j_minus = max(data_j_minus_dict[i]["num_atoms"] for i in range(PARALLEL_STEPS))
+
+                max_edges_j_minus = max(data_j_minus_dict[i]["edge_mask"].shape[0] for i in range(PARALLEL_STEPS))
+
+                max_atoms_random = max(data_random_dict[i]["num_atoms"] for i in range(PARALLEL_STEPS))
+
+                max_edges_random = max(data_random_dict[i]["edge_mask"].shape[0] for i in range(PARALLEL_STEPS))
+                
                 for i in range(PARALLEL_STEPS):
-                    data_j_plus_dict[i] = data.copy()
-                    data_j_minus_dict[i] = data.copy()
-                    data_random_dict[i] = data.copy()
+                    #for j plus positions
+                    num_atoms_to_stack = max_atoms_j_plus - data_j_plus_dict[i]["positions"].shape[1]
+                    padding = torch.zeros(data_j_plus_dict[i]["positions"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["positions"].shape[2]).to(args.device)
+                    stacked_positions = torch.cat((data_j_plus_dict[i]["positions"], padding), dim=1)
+                    data_j_plus_dict[i]["positions"] = stacked_positions
+                    # print("Shape of positions after stacking:", data_j_plus_dict[i]["positions"].shape)
+                    # print("Positions after stacking:", data_j_plus_dict[i]["positions"])
+                    #for j plus one_hot
+                    padding = torch.zeros(data_j_plus_dict[i]["one_hot"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["one_hot"].shape[2]).to(args.device)
+                    stacked_one_hot = torch.cat((data_j_plus_dict[i]["one_hot"], padding), dim=1)
+                    data_j_plus_dict[i]["one_hot"] = stacked_one_hot
+                    # print("Shape of one_hot after stacking:", data_j_plus_dict[i]["one_hot"].shape)
+                    # print("One_hot after stacking:", data_j_plus_dict[i]["one_hot"])
+                    #for j plus fragment_mask
+                    padding = torch.zeros(data_j_plus_dict[i]["fragment_mask"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["fragment_mask"].shape[2]).to(args.device)
+                    stacked_fragment_mask = torch.cat((data_j_plus_dict[i]["fragment_mask"], padding), dim=1)
+                    data_j_plus_dict[i]["fragment_mask"] = stacked_fragment_mask
 
-                    #data j plus
-                    data_j_plus_dict[i]["positions"] = data_j_plus_dict[i]["positions"][:, atom_mask_j_plus[i]]
-                    data_j_plus_dict[i]["num_atoms"] = data_j_plus_dict[i]["positions"].shape[1]
-                    # remove one_hot of atoms in random_indices
-                    data_j_plus_dict[i]["one_hot"] = data_j_plus_dict[i]["one_hot"][:, atom_mask_j_plus[i]]
-                    # remove atom_mask of atoms in random_indices
-                    data_j_plus_dict[i]["atom_mask"] = data_j_plus_dict[i]["atom_mask"][:, atom_mask_j_plus[i]]
-                    # remove fragment_mask of atoms in random_indices
-                    data_j_plus_dict[i]["fragment_mask"] = data_j_plus_dict[i]["fragment_mask"][:, atom_mask_j_plus[i]]
-                    # remove linker_mask of atoms in random_indices
-                    data_j_plus_dict[i]["linker_mask"] = data_j_plus_dict[i]["linker_mask"][:, atom_mask_j_plus[i]]
-                    data_j_plus_dict[i]["charges"] = data_j_plus_dict[i]["charges"][:, atom_mask_j_plus[i]]
-                    data_j_plus_dict[i]["anchors"] = data_j_plus_dict[i]["anchors"][:, atom_mask_j_plus[i]]
-                    # remove edge_mask of atoms in random_indices
-                    # print("Shape of edge_mask:", data_j_plus_dict[i]["edge_mask"].shape)
-                    # print("Shape of atom_mask_j_plus[i]:", atom_mask_j_plus[i].shape)
-                    # print("Shape of atom_mask_j_plus[i].unsqueeze(1):", atom_mask_j_plus[i].unsqueeze(1).shape)
-                    # print("Shape of atom_mask_j_plus[i].unsqueeze(1) * atom_mask_j_plus[i]:", (atom_mask_j_plus[i].unsqueeze(1) * atom_mask_j_plus[i]).shape)
+                    #for j plus charges
+                    padding = torch.zeros(data_j_plus_dict[i]["charges"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["charges"].shape[2]).to(args.device)
+                    stacked_charges = torch.cat((data_j_plus_dict[i]["charges"], padding), dim=1)
+                    data_j_plus_dict[i]["charges"] = stacked_charges
+                    # for kj plus anchors
+                    padding = torch.zeros(data_j_plus_dict[i]["anchors"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["anchors"].shape[2]).to(args.device)
+                    stacked_anchors = torch.cat((data_j_plus_dict[i]["anchors"], padding), dim=1)
+                    data_j_plus_dict[i]["anchors"] = stacked_anchors
+                    # print("Shape of fragment_mask after stacking:", data_j_plus_dict[i]["fragment_mask"].shape)
+                    # print("Fragment_mask after stacking:", data_j_plus_dict[i]["fragment_mask"])
+                    #for j plus linker_mask
+                    padding = torch.zeros(data_j_plus_dict[i]["linker_mask"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["linker_mask"].shape[2]).to(args.device)
+                    stacked_linker_mask = torch.cat((data_j_plus_dict[i]["linker_mask"], padding), dim=1)
+                    data_j_plus_dict[i]["linker_mask"] = stacked_linker_mask
+                    # print("Shape of linker_mask after stacking:", data_j_plus_dict[i]["linker_mask"].shape)
+                    # print("Linker_mask after stacking:", data_j_plus_dict[i]["linker_mask"])
+                    #for j plus atom_mask
+                    padding = torch.zeros(data_j_plus_dict[i]["atom_mask"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["atom_mask"].shape[2]).to(args.device)
+                    stacked_atom_mask = torch.cat((data_j_plus_dict[i]["atom_mask"], padding), dim=1)
+                    data_j_plus_dict[i]["atom_mask"] = stacked_atom_mask
+                    # print("Shape of atom_mask after stacking:", data_j_plus_dict[i]["atom_mask"].shape)
+                    # print("Atom_mask after stacking:", data_j_plus_dict[i]["atom_mask"])
+                    #for j plus edge_mask TODO THIS NEEDS TO BE CHECKED
+                    num_edges_to_stack = max_edges_j_plus - data_j_plus_dict[i]["edge_mask"].shape[0]
+                    data_j_plus_dict[i]["edge_mask"] = data_j_plus_dict[i]["edge_mask"].unsqueeze(0)
+                    padding = torch.zeros(data_j_plus_dict[i]["edge_mask"].shape[0], num_edges_to_stack, data_j_plus_dict[i]["edge_mask"].shape[2]).to(args.device)
+                    stacked_edge_mask = torch.cat((data_j_plus_dict[i]["edge_mask"], padding), dim=1)
+                    data_j_plus_dict[i]["edge_mask"] = stacked_edge_mask
+                    # print("Shape of edge_mask after stacking:", data_j_plus_dict[i]["edge_mask"].shape)
+                    # print("Edge_mask after stacking:", data_j_plus_dict[i]["edge_mask"])
                     
-                    edge_mask_to_keep = (atom_mask_j_plus[i].unsqueeze(1) * atom_mask_j_plus[i]).flatten()
+                    
+                    #for j minus
+                    num_atoms_to_stack = max_atoms_j_minus - data_j_minus_dict[i]["positions"].shape[1]
+                    padding = torch.zeros(data_j_minus_dict[i]["positions"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["positions"].shape[2]).to(args.device) #why does this work?
+                    stacked_positions = torch.cat((data_j_minus_dict[i]["positions"], padding), dim=1)
+                    data_j_minus_dict[i]["positions"] = stacked_positions
+                    # print("Shape of positions after stacking:", data_j_minus_dict[i]["positions"].shape)
+                    # print("Positions after stacking:", data_j_minus_dict[i]["positions"])
+                    #for j minus one_hot
+                    padding = torch.zeros(data_j_minus_dict[i]["one_hot"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["one_hot"].shape[2]).to(args.device)
+                    stacked_one_hot = torch.cat((data_j_minus_dict[i]["one_hot"], padding), dim=1)
+                    data_j_minus_dict[i]["one_hot"] = stacked_one_hot
+                    # print("Shape of one_hot after stacking:", data_j_minus_dict[i]["one_hot"].shape)
+                    # print("One_hot after stacking:", data_j_minus_dict[i]["one_hot"])
+                    #for j minus fragment_mask
+                    padding = torch.zeros(data_j_minus_dict[i]["fragment_mask"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["fragment_mask"].shape[2]).to(args.device)
+                    stacked_fragment_mask = torch.cat((data_j_minus_dict[i]["fragment_mask"], padding), dim=1)
+                    data_j_minus_dict[i]["fragment_mask"] = stacked_fragment_mask
 
-                    # print("Edge mask to keep shape:", edge_mask_to_keep.shape)
-                    data_j_plus_dict[i]["edge_mask"] = data_j_plus_dict[i]["edge_mask"][edge_mask_to_keep]
+                    #for j minus charges
+                    padding = torch.zeros(data_j_minus_dict[i]["charges"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["charges"].shape[2]).to(args.device)
+                    stacked_charges = torch.cat((data_j_minus_dict[i]["charges"], padding), dim=1)
+                    data_j_minus_dict[i]["charges"] = stacked_charges
+                    # for kj plus anchors
+                    padding = torch.zeros(data_j_minus_dict[i]["anchors"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["anchors"].shape[2]).to(args.device)
+                    stacked_anchors = torch.cat((data_j_minus_dict[i]["anchors"], padding), dim=1)
+                    data_j_minus_dict[i]["anchors"] = stacked_anchors
+                    # print("Shape of fragment_mask after stacking:", data_j_minus_dict[i]["fragment_mask"].shape)
+                    # print("Fragment_mask after stacking:", data_j_minus_dict[i]["fragment_mask"])
+                    #for j minus linker_mask
+                    padding = torch.zeros(data_j_minus_dict[i]["linker_mask"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["linker_mask"].shape[2]).to(args.device)
+                    stacked_linker_mask = torch.cat((data_j_minus_dict[i]["linker_mask"], padding), dim=1)
+                    data_j_minus_dict[i]["linker_mask"] = stacked_linker_mask
+                    # print("Shape of linker_mask after stacking:", data_j_minus_dict[i]["linker_mask"].shape)
+                    # print("Linker_mask after stacking:", data_j_minus_dict[i]["linker_mask"])
+                    #for j minus atom_mask
+                    padding = torch.zeros(data_j_minus_dict[i]["atom_mask"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["atom_mask"].shape[2]).to(args.device)
+                    stacked_atom_mask = torch.cat((data_j_minus_dict[i]["atom_mask"], padding), dim=1)
+                    data_j_minus_dict[i]["atom_mask"] = stacked_atom_mask
+                    # print("Shape of atom_mask after stacking:", data_j_minus_dict[i]["atom_mask"].shape)
+                    # print("Atom_mask after stacking:", data_j_minus_dict[i]["atom_mask"])
+                    #for j minus edge_mask
+                    num_edges_to_stack = max_edges_j_minus - data_j_minus_dict[i]["edge_mask"].shape[0]
+                    data_j_minus_dict[i]["edge_mask"] = data_j_minus_dict[i]["edge_mask"].unsqueeze(0)
+                    padding = torch.zeros(data_j_minus_dict[i]["edge_mask"].shape[0], num_edges_to_stack, data_j_minus_dict[i]["edge_mask"].shape[2]).to(args.device)
+                    stacked_edge_mask = torch.cat((data_j_minus_dict[i]["edge_mask"], padding), dim=1)
+                    data_j_minus_dict[i]["edge_mask"] = stacked_edge_mask
+                    # print("Shape of edge_mask after stacking:", data_j_minus_dict[i]["edge_mask"].shape)
+                    # print("Edge_mask after stacking:", data_j_minus_dict[i]["edge_mask"])
 
-                    # for index in N_j_plus:
-                    #     for j in range(num_atoms):
-                    #         data_j_plus_dict[i]["edge_mask"][index * num_atoms + j] = 0
-                    #         data_j_plus_dict[i]["edge_mask"][j * num_atoms + index] = 0
-                    # data_j_plus_dict[i]["edge_mask"] = data_j_plus_dict[i]["edge_mask"][data_j_plus_dict[i]["edge_mask"] != 0]
+                    #for random
+                    num_atoms_to_stack = max_atoms_random - data_random_dict[i]["positions"].shape[1]
+                    padding = torch.zeros(data_random_dict[i]["positions"].shape[0], num_atoms_to_stack, data_random_dict[i]["positions"].shape[2]).to(args.device)
+                    stacked_positions = torch.cat((data_random_dict[i]["positions"], padding), dim=1)
+                    data_random_dict[i]["positions"] = stacked_positions
+                    # print("Shape of positions after stacking:", data_random_dict[i]["positions"].shape)
+                    # print("Positions after stacking:", data_random_dict[i]["positions"])
+                    #for random one_hot
+                    padding = torch.zeros(data_random_dict[i]["one_hot"].shape[0], num_atoms_to_stack, data_random_dict[i]["one_hot"].shape[2]).to(args.device)
+                    stacked_one_hot = torch.cat((data_random_dict[i]["one_hot"], padding), dim=1)
+                    data_random_dict[i]["one_hot"] = stacked_one_hot
+                    # print("Shape of one_hot after stacking:", data_random_dict[i]["one_hot"].shape)
+                    # print("One_hot after stacking:", data_random_dict[i]["one_hot"])
+                    #for random fragment_mask
+                    padding = torch.zeros(data_random_dict[i]["fragment_mask"].shape[0], num_atoms_to_stack, data_random_dict[i]["fragment_mask"].shape[2]).to(args.device)
+                    stacked_fragment_mask = torch.cat((data_random_dict[i]["fragment_mask"], padding), dim=1)
+                    data_random_dict[i]["fragment_mask"] = stacked_fragment_mask
+                    # print("Shape of fragment_mask after stacking:", data_random_dict[i]["fragment_mask"].shape)
+                    # print("Fragment_mask after stacking:", data_random_dict[i]["fragment_mask"])
+                    #for random linker_mask
+                    padding = torch.zeros(data_random_dict[i]["linker_mask"].shape[0], num_atoms_to_stack, data_random_dict[i]["linker_mask"].shape[2]).to(args.device)
+                    stacked_linker_mask = torch.cat((data_random_dict[i]["linker_mask"], padding), dim=1)
+                    data_random_dict[i]["linker_mask"] = stacked_linker_mask
 
-                    #data j minus
-                    data_j_minus_dict[i]["positions"] = data_j_minus_dict[i]["positions"][:, atom_mask_j_minus[i]]
-                    data_j_minus_dict[i]["num_atoms"] = data_j_minus_dict[i]["positions"].shape[1]
-                    # remove one_hot of atoms in random_indices
-                    data_j_minus_dict[i]["one_hot"] = data_j_minus_dict[i]["one_hot"][:, atom_mask_j_minus[i]]
-                    # remove atom_mask of atoms in random_indices
-                    data_j_minus_dict[i]["atom_mask"] = data_j_minus_dict[i]["atom_mask"][:, atom_mask_j_minus[i]]
-                    # remove fragment_mask of atoms in random_indices
-                    data_j_minus_dict[i]["fragment_mask"] = data_j_minus_dict[i]["fragment_mask"][:, atom_mask_j_minus[i]]
-                    # remove linker_mask of atoms in random_indices
-                    data_j_minus_dict[i]["linker_mask"] = data_j_minus_dict[i]["linker_mask"][:, atom_mask_j_minus[i]]
-                    data_j_minus_dict[i]["charges"] = data_j_minus_dict[i]["charges"][:, atom_mask_j_minus[i]]
-                    data_j_minus_dict[i]["anchors"] = data_j_minus_dict[i]["anchors"][:, atom_mask_j_minus[i]]
-                    # remove edge_mask of atoms in random_indices
-                    edge_mask_to_keep = (atom_mask_j_minus[i].unsqueeze(1) * atom_mask_j_minus[i]).flatten() 
-                    data_j_minus_dict[i]["edge_mask"] = data_j_minus_dict[i]["edge_mask"][edge_mask_to_keep]
+                    #for random charges
+                    padding = torch.zeros(data_random_dict[i]["charges"].shape[0], num_atoms_to_stack, data_random_dict[i]["charges"].shape[2]).to(args.device)
+                    stacked_charges = torch.cat((data_random_dict[i]["charges"], padding), dim=1)
+                    data_random_dict[i]["charges"] = stacked_charges
 
-                    #data random
-                    data_random_dict[i]["positions"] = data_random_dict[i]["positions"][:, atom_mask_random_molecule[i]]
-                    data_random_dict[i]["num_atoms"] = data_random_dict[i]["positions"].shape[1]
-                    # remove one_hot of atoms in random_indices
-                    data_random_dict[i]["one_hot"] = data_random_dict[i]["one_hot"][:, atom_mask_random_molecule[i]]
-                    # remove atom_mask of atoms in random_indices
-                    data_random_dict[i]["atom_mask"] = data_random_dict[i]["atom_mask"][:, atom_mask_random_molecule[i]]
-                    # remove fragment_mask of atoms in random_indices
-                    data_random_dict[i]["fragment_mask"] = data_random_dict[i]["fragment_mask"][:, atom_mask_random_molecule[i]]
-                    # remove linker_mask of atoms in random_indices
-                    data_random_dict[i]["linker_mask"] = data_random_dict[i]["linker_mask"][:, atom_mask_random_molecule[i]]
-                    data_random_dict[i]["charges"] = data_random_dict[i]["charges"][:, atom_mask_random_molecule[i]]
-                    data_random_dict[i]["anchors"] = data_random_dict[i]["anchors"][:, atom_mask_random_molecule[i]]
-                    # remove edge_mask of atoms in random_indices
-                    # remove edge_mask of atoms in random_indices
-                    edge_mask_to_keep = (atom_mask_random_molecule[i].unsqueeze(1) * atom_mask_random_molecule[i]).flatten() 
+                    #for random anchors
+                    padding = torch.zeros(data_random_dict[i]["anchors"].shape[0], num_atoms_to_stack, data_random_dict[i]["anchors"].shape[2]).to(args.device)
+                    stacked_anchors = torch.cat((data_random_dict[i]["anchors"], padding), dim=1)
+                    data_random_dict[i]["anchors"] = stacked_anchors
+                    # print("Shape of linker_mask after stacking:", data_random_dict[i]["linker_mask"].shape)
+                    # print("Linker_mask after stacking:", data_random_dict[i]["linker_mask"])
+                    #for random atom_mask
+                    padding = torch.zeros(data_random_dict[i]["atom_mask"].shape[0], num_atoms_to_stack, data_random_dict[i]["atom_mask"].shape[2]).to(args.device)
+                    stacked_atom_mask = torch.cat((data_random_dict[i]["atom_mask"], padding), dim=1)
+                    data_random_dict[i]["atom_mask"] = stacked_atom_mask
+                    # print("Shape of atom_mask after stacking:", data_random_dict[i]["atom_mask"].shape)
+                    # print("Atom_mask after stacking:", data_random_dict[i]["atom_mask"])
+                    #for random edge_mask
+                    num_edges_to_stack = max_edges_random - data_random_dict[i]["edge_mask"].shape[0]
+                    data_random_dict[i]["edge_mask"] = data_random_dict[i]["edge_mask"].unsqueeze(0)
+                    padding = torch.zeros(data_random_dict[i]["edge_mask"].shape[0], num_edges_to_stack, data_random_dict[i]["edge_mask"].shape[2]).to(args.device)
+                    stacked_edge_mask = torch.cat((data_random_dict[i]["edge_mask"], padding), dim=1)
+                    data_random_dict[i]["edge_mask"] = stacked_edge_mask
+                    # print("Shape of edge_mask after stacking:", data_random_dict[i]["edge_mask"].shape)
+                    # print("Edge_mask after stacking:", data_random_dict[i]["edge_mask"])
 
-                    data_random_dict[i]["edge_mask"] = data_random_dict[i]["edge_mask"][edge_mask_to_keep]
-
-
-                
-
-                # print("DEBUG UP TO HERE")
-                # sys.exit()
-                # print("After removal j plus:", data_j_plus["positions"])
-                # print(data_j_plus["positions"].shape)
-                
-                #generation step
-
-                
-
-                # print("Max atoms j plus", max_atoms_j_plus)
-                # print("Max atoms j minus", max_atoms_j_minus)
-                # print("Max atoms random", max_atoms_random)
-                
-                
-                PADDING = True
             
-                if PADDING:
-
-                    max_atoms_j_plus = max(data_j_plus_dict[i]["num_atoms"] for i in range(PARALLEL_STEPS))
-
-                    max_edges_j_plus = max(data_j_plus_dict[i]["edge_mask"].shape[0] for i in range(PARALLEL_STEPS))
-                    
-                    
-                    max_atoms_j_minus = max(data_j_minus_dict[i]["num_atoms"] for i in range(PARALLEL_STEPS))
-
-                    max_edges_j_minus = max(data_j_minus_dict[i]["edge_mask"].shape[0] for i in range(PARALLEL_STEPS))
-
-                    max_atoms_random = max(data_random_dict[i]["num_atoms"] for i in range(PARALLEL_STEPS))
-
-                    max_edges_random = max(data_random_dict[i]["edge_mask"].shape[0] for i in range(PARALLEL_STEPS))
-                    
-                    for i in range(PARALLEL_STEPS):
-                        #for j plus positions
-                        num_atoms_to_stack = max_atoms_j_plus - data_j_plus_dict[i]["positions"].shape[1]
-                        padding = torch.zeros(data_j_plus_dict[i]["positions"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["positions"].shape[2]).to(args.device)
-                        stacked_positions = torch.cat((data_j_plus_dict[i]["positions"], padding), dim=1)
-                        data_j_plus_dict[i]["positions"] = stacked_positions
-                        # print("Shape of positions after stacking:", data_j_plus_dict[i]["positions"].shape)
-                        # print("Positions after stacking:", data_j_plus_dict[i]["positions"])
-                        #for j plus one_hot
-                        padding = torch.zeros(data_j_plus_dict[i]["one_hot"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["one_hot"].shape[2]).to(args.device)
-                        stacked_one_hot = torch.cat((data_j_plus_dict[i]["one_hot"], padding), dim=1)
-                        data_j_plus_dict[i]["one_hot"] = stacked_one_hot
-                        # print("Shape of one_hot after stacking:", data_j_plus_dict[i]["one_hot"].shape)
-                        # print("One_hot after stacking:", data_j_plus_dict[i]["one_hot"])
-                        #for j plus fragment_mask
-                        padding = torch.zeros(data_j_plus_dict[i]["fragment_mask"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["fragment_mask"].shape[2]).to(args.device)
-                        stacked_fragment_mask = torch.cat((data_j_plus_dict[i]["fragment_mask"], padding), dim=1)
-                        data_j_plus_dict[i]["fragment_mask"] = stacked_fragment_mask
-
-                        #for j plus charges
-                        padding = torch.zeros(data_j_plus_dict[i]["charges"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["charges"].shape[2]).to(args.device)
-                        stacked_charges = torch.cat((data_j_plus_dict[i]["charges"], padding), dim=1)
-                        data_j_plus_dict[i]["charges"] = stacked_charges
-                        # for kj plus anchors
-                        padding = torch.zeros(data_j_plus_dict[i]["anchors"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["anchors"].shape[2]).to(args.device)
-                        stacked_anchors = torch.cat((data_j_plus_dict[i]["anchors"], padding), dim=1)
-                        data_j_plus_dict[i]["anchors"] = stacked_anchors
-                        # print("Shape of fragment_mask after stacking:", data_j_plus_dict[i]["fragment_mask"].shape)
-                        # print("Fragment_mask after stacking:", data_j_plus_dict[i]["fragment_mask"])
-                        #for j plus linker_mask
-                        padding = torch.zeros(data_j_plus_dict[i]["linker_mask"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["linker_mask"].shape[2]).to(args.device)
-                        stacked_linker_mask = torch.cat((data_j_plus_dict[i]["linker_mask"], padding), dim=1)
-                        data_j_plus_dict[i]["linker_mask"] = stacked_linker_mask
-                        # print("Shape of linker_mask after stacking:", data_j_plus_dict[i]["linker_mask"].shape)
-                        # print("Linker_mask after stacking:", data_j_plus_dict[i]["linker_mask"])
-                        #for j plus atom_mask
-                        padding = torch.zeros(data_j_plus_dict[i]["atom_mask"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["atom_mask"].shape[2]).to(args.device)
-                        stacked_atom_mask = torch.cat((data_j_plus_dict[i]["atom_mask"], padding), dim=1)
-                        data_j_plus_dict[i]["atom_mask"] = stacked_atom_mask
-                        # print("Shape of atom_mask after stacking:", data_j_plus_dict[i]["atom_mask"].shape)
-                        # print("Atom_mask after stacking:", data_j_plus_dict[i]["atom_mask"])
-                        #for j plus edge_mask TODO THIS NEEDS TO BE CHECKED
-                        num_edges_to_stack = max_edges_j_plus - data_j_plus_dict[i]["edge_mask"].shape[0]
-                        data_j_plus_dict[i]["edge_mask"] = data_j_plus_dict[i]["edge_mask"].unsqueeze(0)
-                        padding = torch.zeros(data_j_plus_dict[i]["edge_mask"].shape[0], num_edges_to_stack, data_j_plus_dict[i]["edge_mask"].shape[2]).to(args.device)
-                        stacked_edge_mask = torch.cat((data_j_plus_dict[i]["edge_mask"], padding), dim=1)
-                        data_j_plus_dict[i]["edge_mask"] = stacked_edge_mask
-                        # print("Shape of edge_mask after stacking:", data_j_plus_dict[i]["edge_mask"].shape)
-                        # print("Edge_mask after stacking:", data_j_plus_dict[i]["edge_mask"])
-                        
-                        
-                        #for j minus
-                        num_atoms_to_stack = max_atoms_j_minus - data_j_minus_dict[i]["positions"].shape[1]
-                        padding = torch.zeros(data_j_minus_dict[i]["positions"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["positions"].shape[2]).to(args.device) #why does this work?
-                        stacked_positions = torch.cat((data_j_minus_dict[i]["positions"], padding), dim=1)
-                        data_j_minus_dict[i]["positions"] = stacked_positions
-                        # print("Shape of positions after stacking:", data_j_minus_dict[i]["positions"].shape)
-                        # print("Positions after stacking:", data_j_minus_dict[i]["positions"])
-                        #for j minus one_hot
-                        padding = torch.zeros(data_j_minus_dict[i]["one_hot"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["one_hot"].shape[2]).to(args.device)
-                        stacked_one_hot = torch.cat((data_j_minus_dict[i]["one_hot"], padding), dim=1)
-                        data_j_minus_dict[i]["one_hot"] = stacked_one_hot
-                        # print("Shape of one_hot after stacking:", data_j_minus_dict[i]["one_hot"].shape)
-                        # print("One_hot after stacking:", data_j_minus_dict[i]["one_hot"])
-                        #for j minus fragment_mask
-                        padding = torch.zeros(data_j_minus_dict[i]["fragment_mask"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["fragment_mask"].shape[2]).to(args.device)
-                        stacked_fragment_mask = torch.cat((data_j_minus_dict[i]["fragment_mask"], padding), dim=1)
-                        data_j_minus_dict[i]["fragment_mask"] = stacked_fragment_mask
-
-                        #for j minus charges
-                        padding = torch.zeros(data_j_minus_dict[i]["charges"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["charges"].shape[2]).to(args.device)
-                        stacked_charges = torch.cat((data_j_minus_dict[i]["charges"], padding), dim=1)
-                        data_j_minus_dict[i]["charges"] = stacked_charges
-                        # for kj plus anchors
-                        padding = torch.zeros(data_j_minus_dict[i]["anchors"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["anchors"].shape[2]).to(args.device)
-                        stacked_anchors = torch.cat((data_j_minus_dict[i]["anchors"], padding), dim=1)
-                        data_j_minus_dict[i]["anchors"] = stacked_anchors
-                        # print("Shape of fragment_mask after stacking:", data_j_minus_dict[i]["fragment_mask"].shape)
-                        # print("Fragment_mask after stacking:", data_j_minus_dict[i]["fragment_mask"])
-                        #for j minus linker_mask
-                        padding = torch.zeros(data_j_minus_dict[i]["linker_mask"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["linker_mask"].shape[2]).to(args.device)
-                        stacked_linker_mask = torch.cat((data_j_minus_dict[i]["linker_mask"], padding), dim=1)
-                        data_j_minus_dict[i]["linker_mask"] = stacked_linker_mask
-                        # print("Shape of linker_mask after stacking:", data_j_minus_dict[i]["linker_mask"].shape)
-                        # print("Linker_mask after stacking:", data_j_minus_dict[i]["linker_mask"])
-                        #for j minus atom_mask
-                        padding = torch.zeros(data_j_minus_dict[i]["atom_mask"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["atom_mask"].shape[2]).to(args.device)
-                        stacked_atom_mask = torch.cat((data_j_minus_dict[i]["atom_mask"], padding), dim=1)
-                        data_j_minus_dict[i]["atom_mask"] = stacked_atom_mask
-                        # print("Shape of atom_mask after stacking:", data_j_minus_dict[i]["atom_mask"].shape)
-                        # print("Atom_mask after stacking:", data_j_minus_dict[i]["atom_mask"])
-                        #for j minus edge_mask
-                        num_edges_to_stack = max_edges_j_minus - data_j_minus_dict[i]["edge_mask"].shape[0]
-                        data_j_minus_dict[i]["edge_mask"] = data_j_minus_dict[i]["edge_mask"].unsqueeze(0)
-                        padding = torch.zeros(data_j_minus_dict[i]["edge_mask"].shape[0], num_edges_to_stack, data_j_minus_dict[i]["edge_mask"].shape[2]).to(args.device)
-                        stacked_edge_mask = torch.cat((data_j_minus_dict[i]["edge_mask"], padding), dim=1)
-                        data_j_minus_dict[i]["edge_mask"] = stacked_edge_mask
-                        # print("Shape of edge_mask after stacking:", data_j_minus_dict[i]["edge_mask"].shape)
-                        # print("Edge_mask after stacking:", data_j_minus_dict[i]["edge_mask"])
-
-                        #for random
-                        num_atoms_to_stack = max_atoms_random - data_random_dict[i]["positions"].shape[1]
-                        padding = torch.zeros(data_random_dict[i]["positions"].shape[0], num_atoms_to_stack, data_random_dict[i]["positions"].shape[2]).to(args.device)
-                        stacked_positions = torch.cat((data_random_dict[i]["positions"], padding), dim=1)
-                        data_random_dict[i]["positions"] = stacked_positions
-                        # print("Shape of positions after stacking:", data_random_dict[i]["positions"].shape)
-                        # print("Positions after stacking:", data_random_dict[i]["positions"])
-                        #for random one_hot
-                        padding = torch.zeros(data_random_dict[i]["one_hot"].shape[0], num_atoms_to_stack, data_random_dict[i]["one_hot"].shape[2]).to(args.device)
-                        stacked_one_hot = torch.cat((data_random_dict[i]["one_hot"], padding), dim=1)
-                        data_random_dict[i]["one_hot"] = stacked_one_hot
-                        # print("Shape of one_hot after stacking:", data_random_dict[i]["one_hot"].shape)
-                        # print("One_hot after stacking:", data_random_dict[i]["one_hot"])
-                        #for random fragment_mask
-                        padding = torch.zeros(data_random_dict[i]["fragment_mask"].shape[0], num_atoms_to_stack, data_random_dict[i]["fragment_mask"].shape[2]).to(args.device)
-                        stacked_fragment_mask = torch.cat((data_random_dict[i]["fragment_mask"], padding), dim=1)
-                        data_random_dict[i]["fragment_mask"] = stacked_fragment_mask
-                        # print("Shape of fragment_mask after stacking:", data_random_dict[i]["fragment_mask"].shape)
-                        # print("Fragment_mask after stacking:", data_random_dict[i]["fragment_mask"])
-                        #for random linker_mask
-                        padding = torch.zeros(data_random_dict[i]["linker_mask"].shape[0], num_atoms_to_stack, data_random_dict[i]["linker_mask"].shape[2]).to(args.device)
-                        stacked_linker_mask = torch.cat((data_random_dict[i]["linker_mask"], padding), dim=1)
-                        data_random_dict[i]["linker_mask"] = stacked_linker_mask
-
-                        #for random charges
-                        padding = torch.zeros(data_random_dict[i]["charges"].shape[0], num_atoms_to_stack, data_random_dict[i]["charges"].shape[2]).to(args.device)
-                        stacked_charges = torch.cat((data_random_dict[i]["charges"], padding), dim=1)
-                        data_random_dict[i]["charges"] = stacked_charges
-
-                        #for random anchors
-                        padding = torch.zeros(data_random_dict[i]["anchors"].shape[0], num_atoms_to_stack, data_random_dict[i]["anchors"].shape[2]).to(args.device)
-                        stacked_anchors = torch.cat((data_random_dict[i]["anchors"], padding), dim=1)
-                        data_random_dict[i]["anchors"] = stacked_anchors
-                        # print("Shape of linker_mask after stacking:", data_random_dict[i]["linker_mask"].shape)
-                        # print("Linker_mask after stacking:", data_random_dict[i]["linker_mask"])
-                        #for random atom_mask
-                        padding = torch.zeros(data_random_dict[i]["atom_mask"].shape[0], num_atoms_to_stack, data_random_dict[i]["atom_mask"].shape[2]).to(args.device)
-                        stacked_atom_mask = torch.cat((data_random_dict[i]["atom_mask"], padding), dim=1)
-                        data_random_dict[i]["atom_mask"] = stacked_atom_mask
-                        # print("Shape of atom_mask after stacking:", data_random_dict[i]["atom_mask"].shape)
-                        # print("Atom_mask after stacking:", data_random_dict[i]["atom_mask"])
-                        #for random edge_mask
-                        num_edges_to_stack = max_edges_random - data_random_dict[i]["edge_mask"].shape[0]
-                        data_random_dict[i]["edge_mask"] = data_random_dict[i]["edge_mask"].unsqueeze(0)
-                        padding = torch.zeros(data_random_dict[i]["edge_mask"].shape[0], num_edges_to_stack, data_random_dict[i]["edge_mask"].shape[2]).to(args.device)
-                        stacked_edge_mask = torch.cat((data_random_dict[i]["edge_mask"], padding), dim=1)
-                        data_random_dict[i]["edge_mask"] = stacked_edge_mask
-                        # print("Shape of edge_mask after stacking:", data_random_dict[i]["edge_mask"].shape)
-                        # print("Edge_mask after stacking:", data_random_dict[i]["edge_mask"])
-
-                
-                #create batch for j plus
-                data_j_plus_batch = {}
-                data_j_plus_batch["positions"] = torch.stack([data_j_plus_dict[i]["positions"] for i in range(PARALLEL_STEPS)], dim=0).squeeze()
-                data_j_plus_batch["one_hot"] = torch.stack([data_j_plus_dict[i]["one_hot"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
-                data_j_plus_batch["atom_mask"] = torch.stack([data_j_plus_dict[i]["atom_mask"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
-                data_j_plus_batch["fragment_mask"] = torch.stack([data_j_plus_dict[i]["fragment_mask"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
-                data_j_plus_batch["linker_mask"] = torch.stack([data_j_plus_dict[i]["linker_mask"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
-                data_j_plus_batch["charges"] = torch.stack([data_j_plus_dict[i]["charges"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
-                data_j_plus_batch["anchors"] = torch.stack([data_j_plus_dict[i]["anchors"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
-                # data_j_plus_batch["edge_mask"] = torch.stack([data_j_plus_dict[i]["edge_mask"] for i in range(PARALLEL_STEPS)], dim=0)
-                
-                data_j_plus_batch["uuid"] = [i for i in range(PARALLEL_STEPS)]
-                data_j_plus_batch["num_atoms"] = [data_j_plus_dict[i]["num_atoms"] for i in range(PARALLEL_STEPS)]
-                data_j_plus_batch["name"] = [data["name"] for _ in range(PARALLEL_STEPS)]
-                data_j_plus_batch["edge_mask"] = torch.cat([data_j_plus_dict[i]["edge_mask"] for i in range(PARALLEL_STEPS)], dim=0).squeeze().view(-1).unsqueeze(1)
+            #create batch for j plus
+            data_j_plus_batch = {}
+            data_j_plus_batch["positions"] = torch.stack([data_j_plus_dict[i]["positions"] for i in range(PARALLEL_STEPS)], dim=0).squeeze()
+            data_j_plus_batch["one_hot"] = torch.stack([data_j_plus_dict[i]["one_hot"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
+            data_j_plus_batch["atom_mask"] = torch.stack([data_j_plus_dict[i]["atom_mask"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
+            data_j_plus_batch["fragment_mask"] = torch.stack([data_j_plus_dict[i]["fragment_mask"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
+            data_j_plus_batch["linker_mask"] = torch.stack([data_j_plus_dict[i]["linker_mask"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
+            data_j_plus_batch["charges"] = torch.stack([data_j_plus_dict[i]["charges"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
+            data_j_plus_batch["anchors"] = torch.stack([data_j_plus_dict[i]["anchors"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
+            # data_j_plus_batch["edge_mask"] = torch.stack([data_j_plus_dict[i]["edge_mask"] for i in range(PARALLEL_STEPS)], dim=0)
+            
+            data_j_plus_batch["uuid"] = [i for i in range(PARALLEL_STEPS)]
+            data_j_plus_batch["num_atoms"] = [data_j_plus_dict[i]["num_atoms"] for i in range(PARALLEL_STEPS)]
+            data_j_plus_batch["name"] = [data["name"] for _ in range(PARALLEL_STEPS)]
+            data_j_plus_batch["edge_mask"] = torch.cat([data_j_plus_dict[i]["edge_mask"] for i in range(PARALLEL_STEPS)], dim=0).squeeze().view(-1).unsqueeze(1)
 
 
-                #create batch for j minus
-                data_j_minus_batch = {}
-                data_j_minus_batch["positions"] = torch.stack([data_j_minus_dict[i]["positions"] for i in range(PARALLEL_STEPS)], dim=0).squeeze()
-                data_j_minus_batch["one_hot"] = torch.stack([data_j_minus_dict[i]["one_hot"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
-                data_j_minus_batch["atom_mask"] = torch.stack([data_j_minus_dict[i]["atom_mask"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
-                data_j_minus_batch["fragment_mask"] = torch.stack([data_j_minus_dict[i]["fragment_mask"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
-                data_j_minus_batch["linker_mask"] = torch.stack([data_j_minus_dict[i]["linker_mask"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
-                data_j_minus_batch["charges"] = torch.stack([data_j_minus_dict[i]["charges"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
-                data_j_minus_batch["anchors"] = torch.stack([data_j_minus_dict[i]["anchors"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
-                # data_j_minus_batch["edge_mask"] = torch.stack([data_j_minus_dict[i]["edge_mask"] for i in range(PARALLEL_STEPS)], dim=0)
-                data_j_minus_batch["uuid"] = [i for i in range(PARALLEL_STEPS)]
-                data_j_minus_batch["num_atoms"] = [data_j_minus_dict[i]["num_atoms"] for i in range(PARALLEL_STEPS)]
-                data_j_minus_batch["name"] = [data["name"] for _ in range(PARALLEL_STEPS)]
-                data_j_minus_batch["edge_mask"] = torch.cat([data_j_minus_dict[i]["edge_mask"] for i in range(PARALLEL_STEPS)], dim=0).squeeze().view(-1).unsqueeze(1)
+            #create batch for j minus
+            data_j_minus_batch = {}
+            data_j_minus_batch["positions"] = torch.stack([data_j_minus_dict[i]["positions"] for i in range(PARALLEL_STEPS)], dim=0).squeeze()
+            data_j_minus_batch["one_hot"] = torch.stack([data_j_minus_dict[i]["one_hot"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
+            data_j_minus_batch["atom_mask"] = torch.stack([data_j_minus_dict[i]["atom_mask"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
+            data_j_minus_batch["fragment_mask"] = torch.stack([data_j_minus_dict[i]["fragment_mask"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
+            data_j_minus_batch["linker_mask"] = torch.stack([data_j_minus_dict[i]["linker_mask"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
+            data_j_minus_batch["charges"] = torch.stack([data_j_minus_dict[i]["charges"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
+            data_j_minus_batch["anchors"] = torch.stack([data_j_minus_dict[i]["anchors"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
+            # data_j_minus_batch["edge_mask"] = torch.stack([data_j_minus_dict[i]["edge_mask"] for i in range(PARALLEL_STEPS)], dim=0)
+            data_j_minus_batch["uuid"] = [i for i in range(PARALLEL_STEPS)]
+            data_j_minus_batch["num_atoms"] = [data_j_minus_dict[i]["num_atoms"] for i in range(PARALLEL_STEPS)]
+            data_j_minus_batch["name"] = [data["name"] for _ in range(PARALLEL_STEPS)]
+            data_j_minus_batch["edge_mask"] = torch.cat([data_j_minus_dict[i]["edge_mask"] for i in range(PARALLEL_STEPS)], dim=0).squeeze().view(-1).unsqueeze(1)
 
-                #create batch for random
-                data_random_batch = {}
-                data_random_batch["positions"] = torch.stack([data_random_dict[i]["positions"] for i in range(PARALLEL_STEPS)], dim=0).squeeze()
-                data_random_batch["one_hot"] = torch.stack([data_random_dict[i]["one_hot"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
-                data_random_batch["atom_mask"] = torch.stack([data_random_dict[i]["atom_mask"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
-                data_random_batch["fragment_mask"] = torch.stack([data_random_dict[i]["fragment_mask"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
-                data_random_batch["linker_mask"] = torch.stack([data_random_dict[i]["linker_mask"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
-                data_random_batch["charges"] = torch.stack([data_random_dict[i]["charges"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
-                data_random_batch["anchors"] = torch.stack([data_random_dict[i]["anchors"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
-                # data_random_batch["edge_mask"] = torch.stack([data_random_dict[i]["edge_mask"] for i in range(PARALLEL_STEPS)], dim=0)
-                data_random_batch["uuid"] = [i for i in range(PARALLEL_STEPS)]
-                data_random_batch["num_atoms"] = [data_random_dict[i]["num_atoms"] for i in range(PARALLEL_STEPS)]
-                data_random_batch["name"] = [data["name"] for _ in range(PARALLEL_STEPS)]
-                data_random_batch["edge_mask"] = torch.cat([data_random_dict[i]["edge_mask"] for i in range(PARALLEL_STEPS)], dim=0).squeeze().view(-1).unsqueeze(1)
+            #create batch for random
+            data_random_batch = {}
+            data_random_batch["positions"] = torch.stack([data_random_dict[i]["positions"] for i in range(PARALLEL_STEPS)], dim=0).squeeze()
+            data_random_batch["one_hot"] = torch.stack([data_random_dict[i]["one_hot"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
+            data_random_batch["atom_mask"] = torch.stack([data_random_dict[i]["atom_mask"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
+            data_random_batch["fragment_mask"] = torch.stack([data_random_dict[i]["fragment_mask"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
+            data_random_batch["linker_mask"] = torch.stack([data_random_dict[i]["linker_mask"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
+            data_random_batch["charges"] = torch.stack([data_random_dict[i]["charges"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
+            data_random_batch["anchors"] = torch.stack([data_random_dict[i]["anchors"] for i in range(PARALLEL_STEPS)], dim=0).squeeze(1)
+            # data_random_batch["edge_mask"] = torch.stack([data_random_dict[i]["edge_mask"] for i in range(PARALLEL_STEPS)], dim=0)
+            data_random_batch["uuid"] = [i for i in range(PARALLEL_STEPS)]
+            data_random_batch["num_atoms"] = [data_random_dict[i]["num_atoms"] for i in range(PARALLEL_STEPS)]
+            data_random_batch["name"] = [data["name"] for _ in range(PARALLEL_STEPS)]
+            data_random_batch["edge_mask"] = torch.cat([data_random_dict[i]["edge_mask"] for i in range(PARALLEL_STEPS)], dim=0).squeeze().view(-1).unsqueeze(1)
 
 
-                #trying the new data batch
-                chain_j_plus_batch, node_mask_j_plus_batch = model.sample_chain(data_j_plus_batch, keep_frames=args.keep_frames)
+            #trying the new data batch
+            chain_j_plus_batch, node_mask_j_plus_batch = model.sample_chain(data_j_plus_batch, keep_frames=args.keep_frames)
 
-                chain_j_plus = chain_j_plus_batch[0, :, :, :] #it should take the first frame and all batch elements -> check it is really the first frame (I need the one at t0, the final generated molecule)
-                
-                chain_j_minus_batch, node_mask_j_minus_batch = model.sample_chain(data_j_minus_batch, keep_frames=args.keep_frames)
+            chain_j_plus = chain_j_plus_batch[0, :, :, :] #it should take the first frame and all batch elements -> check it is really the first frame (I need the one at t0, the final generated molecule)
+            
+            chain_j_minus_batch, node_mask_j_minus_batch = model.sample_chain(data_j_minus_batch, keep_frames=args.keep_frames)
 
-                chain_j_minus = chain_j_minus_batch[0, :, :, :] 
+            chain_j_minus = chain_j_minus_batch[0, :, :, :] 
 
-                chain_random_batch, node_mask_random_batch = model.sample_chain(data_random_batch, keep_frames=args.keep_frames)
+            chain_random_batch, node_mask_random_batch = model.sample_chain(data_random_batch, keep_frames=args.keep_frames)
 
-                chain_random = chain_random_batch[0, :, :, :]
-                
-                
-                #with node j
-                # chain_j_plus, node_mask_j_plus = model.sample_chain(data_j_plus, keep_frames=args.keep_frames)
-                #take only the ts 0 frame
-                chain_with_full_fragments_batch = chain_with_full_fragments.repeat(PARALLEL_STEPS, 1, 1)
+            chain_random = chain_random_batch[0, :, :, :]
+            
+            
+            #with node j
+            # chain_j_plus, node_mask_j_plus = model.sample_chain(data_j_plus, keep_frames=args.keep_frames)
+            #take only the ts 0 frame
+            chain_with_full_fragments_batch = chain_with_full_fragments.repeat(PARALLEL_STEPS, 1, 1)
 
-                
-                V_j_plus_distance_batch = compute_molecular_distance_batch(chain_with_full_fragments_batch, chain_j_plus, mask1=original_linker_mask_batch, mask2=data_j_plus_batch["linker_mask"].squeeze())
-                
-                
-                V_j_plus_distance = torch.sum(V_j_plus_distance_batch).item()
-                # print("V j plus distance batch", V_j_plus_distance_batch)
-                # print("V_j_plus_distance", V_j_plus_distance)
-                
+            
+            V_j_plus_distance_batch = compute_molecular_distance_batch(chain_with_full_fragments_batch, chain_j_plus, mask1=original_linker_mask_batch, mask2=data_j_plus_batch["linker_mask"].squeeze())
+            
+            
+            V_j_plus_distance = torch.sum(V_j_plus_distance_batch).item()
+            # print("V j plus distance batch", V_j_plus_distance_batch)
+            # print("V_j_plus_distance", V_j_plus_distance)
+            
 
-                V_j_plus_cosine_similarity_batch = compute_cosine_similarity_batch(chain_with_full_fragments_batch.cpu(), chain_j_plus.cpu(), mask1=original_linker_mask_batch.cpu(), mask2=data_j_plus_batch["linker_mask"].squeeze().cpu())
+            V_j_plus_cosine_similarity_batch = compute_cosine_similarity_batch(chain_with_full_fragments_batch.cpu(), chain_j_plus.cpu(), mask1=original_linker_mask_batch.cpu(), mask2=data_j_plus_batch["linker_mask"].squeeze().cpu())
 
-                V_j_plus_cosine_similarity = sum(V_j_plus_cosine_similarity_batch)
-                # print("V j plus cosine similarity batch", V_j_plus_cosine_similarity_batch)
-                # print("V_j_plus_cosine_similarity", V_j_plus_cosine_similarity)
-                # print("V_j_plus", V_j_plus)
+            V_j_plus_cosine_similarity = sum(V_j_plus_cosine_similarity_batch)
+            # print("V j plus cosine similarity batch", V_j_plus_cosine_similarity_batch)
+            # print("V_j_plus_cosine_similarity", V_j_plus_cosine_similarity)
+            # print("V_j_plus", V_j_plus)
 
-                # #without node j
-                # chain_j_minus, node_mask_j_minus = model.sample_chain(data_j_minus, keep_frames=args.keep_frames)
+            # #without node j
+            # chain_j_minus, node_mask_j_minus = model.sample_chain(data_j_minus, keep_frames=args.keep_frames)
 
-                # #take only the ts 0 frame
-                # chain_j_minus = chain_j_minus[0, 0, :, :]
+            # #take only the ts 0 frame
+            # chain_j_minus = chain_j_minus[0, 0, :, :]
 
-                V_j_minus_distance_batch = compute_molecular_distance_batch(chain_with_full_fragments_batch, chain_j_minus, mask1=original_linker_mask_batch, mask2=data_j_minus_batch["linker_mask"].squeeze())
+            V_j_minus_distance_batch = compute_molecular_distance_batch(chain_with_full_fragments_batch, chain_j_minus, mask1=original_linker_mask_batch, mask2=data_j_minus_batch["linker_mask"].squeeze())
 
-                V_j_minus_distance = torch.sum(V_j_minus_distance_batch).item()
-                # print("V j minus distance batch", V_j_minus_distance_batch)
-                # print("V_j_minus_distance", V_j_minus_distance)
-                
-                V_j_minus_cosine_similarity_batch = compute_cosine_similarity_batch(chain_with_full_fragments_batch.cpu(), chain_j_minus.cpu(), mask1=original_linker_mask_batch.cpu(), mask2=data_j_minus_batch["linker_mask"].squeeze().cpu())
+            V_j_minus_distance = torch.sum(V_j_minus_distance_batch).item()
+            # print("V j minus distance batch", V_j_minus_distance_batch)
+            # print("V_j_minus_distance", V_j_minus_distance)
+            
+            V_j_minus_cosine_similarity_batch = compute_cosine_similarity_batch(chain_with_full_fragments_batch.cpu(), chain_j_minus.cpu(), mask1=original_linker_mask_batch.cpu(), mask2=data_j_minus_batch["linker_mask"].squeeze().cpu())
 
-                V_j_minus_cosine_similarity = sum(V_j_minus_cosine_similarity_batch)
+            V_j_minus_cosine_similarity = sum(V_j_minus_cosine_similarity_batch)
 
-                # print("V j minus cosine similarity batch", V_j_minus_cosine_similarity_batch)
-                # print("V_j_minus_cosine_similarity", V_j_minus_cosine_similarity)
+            # print("V j minus cosine similarity batch", V_j_minus_cosine_similarity_batch)
+            # print("V_j_minus_cosine_similarity", V_j_minus_cosine_similarity)
 
-                #with random sample
-                # chain_random, node_mask_random = model.sample_chain(data_random, keep_frames=args.keep_frames)
+            #with random sample
+            # chain_random, node_mask_random = model.sample_chain(data_random, keep_frames=args.keep_frames)
 
-                # chain_random = chain_random[0, 0, :, :]
+            # chain_random = chain_random[0, 0, :, :]
 
-                V_random_distance_batch = compute_molecular_distance_batch(chain_with_full_fragments_batch, chain_random, mask1=original_linker_mask_batch, mask2=data_random_batch["linker_mask"].squeeze())
-                
-                # print("V random distance batch", V_random_distance_batch)
-                
+            V_random_distance_batch = compute_molecular_distance_batch(chain_with_full_fragments_batch, chain_random, mask1=original_linker_mask_batch, mask2=data_random_batch["linker_mask"].squeeze())
+            
+            # print("V random distance batch", V_random_distance_batch)
+            
 
-                V_random_cosine_similarity = compute_cosine_similarity_batch(chain_with_full_fragments_batch.cpu(), chain_random.cpu(), mask1=original_linker_mask_batch.cpu(), mask2=data_random_batch["linker_mask"].squeeze().cpu())
+            V_random_cosine_similarity = compute_cosine_similarity_batch(chain_with_full_fragments_batch.cpu(), chain_random.cpu(), mask1=original_linker_mask_batch.cpu(), mask2=data_random_batch["linker_mask"].squeeze().cpu())
 
-                for r_dist in V_random_distance_batch:
-                    distances_random_samples.append(r_dist.item())
-                
-                for r_cos in V_random_cosine_similarity:
-                    cosine_similarities_random_samples.append(r_cos)
-                
+            for r_dist in V_random_distance_batch:
+                distances_random_samples.append(r_dist.item())
+            
+            for r_cos in V_random_cosine_similarity:
+                cosine_similarities_random_samples.append(r_cos)
+            
 
-                # print("Distances random samples", str(distances_random_samples))
-                # print("Cosine similarities random samples", str(cosine_similarities_random_samples))
-                
+            # print("Distances random samples", str(distances_random_samples))
+            # print("Cosine similarities random samples", str(cosine_similarities_random_samples))
+            
 
-                # print(V_random_distance, V_random_cosine_similarity)
-                
-                marginal_contrib_distance += (V_j_plus_distance - V_j_minus_distance)
+            # print(V_random_distance, V_random_cosine_similarity)
+            
+            marginal_contrib_distance += (V_j_plus_distance - V_j_minus_distance)
 
-                marginal_contrib_cosine_similarity += (V_j_plus_cosine_similarity - V_j_minus_cosine_similarity)
+            marginal_contrib_cosine_similarity += (V_j_plus_cosine_similarity - V_j_minus_cosine_similarity)
 
-                # marginal_contrib_hausdorff += (V_j_plus_hausdorff - V_j_minus_hausdorff)
+            # marginal_contrib_hausdorff += (V_j_plus_hausdorff - V_j_minus_hausdorff)
 
-            phi_atoms[fragment_indices[j].item()] = [0,0] #,0]    
-            phi_atoms[fragment_indices[j].item()][0] = marginal_contrib_distance/M #j is the index of the fragment atom in the fragment indices tensor
-            phi_atoms[fragment_indices[j].item()][1] = marginal_contrib_cosine_similarity/M
-            # phi_atoms[fragment_indices[j]][2] = marginal_contrib_hausdorff/M
+        phi_atoms[fragment_indices[j].item()] = [0,0] #,0]    
+        phi_atoms[fragment_indices[j].item()][0] = marginal_contrib_distance/M #j is the index of the fragment atom in the fragment indices tensor
+        phi_atoms[fragment_indices[j].item()][1] = marginal_contrib_cosine_similarity/M
+        # phi_atoms[fragment_indices[j]][2] = marginal_contrib_hausdorff/M
 
-        print(data["name"])
+    print(data["name"])
 
-        phi_atoms_distances = {}
-        phi_atoms_cosine_similarity = {}
+    phi_atoms_distances = {}
+    phi_atoms_cosine_similarity = {}
+    for atom_index, phi_values in phi_atoms.items():
+        phi_atoms_distances[atom_index] = phi_values[0]
+        phi_atoms_cosine_similarity[atom_index] = phi_values[1]
+    
+    # Save phi_atoms to a text file
+    with open(f'{folder_save_path}/phi_atoms_{data_index}.txt', 'w') as write_file:
+        write_file.write("sample name: " + str(data["name"]) + "\n")
+        write_file.write("atom_index,distance,cosine_similarity\n")
         for atom_index, phi_values in phi_atoms.items():
-            phi_atoms_distances[atom_index] = phi_values[0]
-            phi_atoms_cosine_similarity[atom_index] = phi_values[1]
-        
-        # Save phi_atoms to a text file
-        with open(f'{folder_save_path}/phi_atoms_{sampled}.txt', 'w') as write_file:
-            write_file.write("sample name: " + str(data["name"]) + "\n")
-            write_file.write("atom_index,distance,cosine_similarity\n")
-            for atom_index, phi_values in phi_atoms.items():
-                write_file.write(f"{atom_index},{phi_values[0]},{phi_values[1]}\n")
+            write_file.write(f"{atom_index},{phi_values[0]},{phi_values[1]}\n")
 
-            write_file.write("\n")
-            # save sum of phi values for disance and cosine similarity
-            write_file.write("Sum of phi values for distance\n")
-            write_file.write(str(sum([p_values[0] for p_values in phi_atoms.values()])) + "\n")
-            write_file.write("Sum of phi values for cosine similarity\n")
-            write_file.write(str(sum([p_values[1] for p_values in phi_atoms.values()])) + "\n")     
-            write_file.write("Average distance random samples:\n")
-            write_file.write(str(sum(distances_random_samples)/len(distances_random_samples)) + "\n")
-            write_file.write("Average cosine similarity random samples:\n")
-            write_file.write(str(sum(cosine_similarities_random_samples)/len(cosine_similarities_random_samples)) + "\n")      
-            write_file.write("Distances random samples\n")
-            write_file.write(str(distances_random_samples) + "\n")
-            write_file.write("Cosines similarity random samples\n")
-            write_file.write(str(cosine_similarities_random_samples) + "\n")
+        write_file.write("\n")
+        # save sum of phi values for disance and cosine similarity
+        write_file.write("Sum of phi values for distance\n")
+        write_file.write(str(sum([p_values[0] for p_values in phi_atoms.values()])) + "\n")
+        write_file.write("Sum of phi values for cosine similarity\n")
+        write_file.write(str(sum([p_values[1] for p_values in phi_atoms.values()])) + "\n")     
+        write_file.write("Average distance random samples:\n")
+        write_file.write(str(sum(distances_random_samples)/len(distances_random_samples)) + "\n")
+        write_file.write("Average cosine similarity random samples:\n")
+        write_file.write(str(sum(cosine_similarities_random_samples)/len(cosine_similarities_random_samples)) + "\n")      
+        write_file.write("Distances random samples\n")
+        write_file.write(str(distances_random_samples) + "\n")
+        write_file.write("Cosines similarity random samples\n")
+        write_file.write(str(cosine_similarities_random_samples) + "\n")
 
-        if SAVE_VISUALIZATION:
-            for i in range(len(data['positions'])):
-                chain = chain_batch[:, i, :, :]
-                assert chain.shape[0] == args.keep_frames
-                assert chain.shape[1] == data['positions'].shape[1]
-                assert chain.shape[2] == data['positions'].shape[2] + data['one_hot'].shape[2] + model.include_charges
+    if SAVE_VISUALIZATION:
+        for i in range(len(data['positions'])):
+            chain = chain_batch[:, i, :, :]
+            assert chain.shape[0] == args.keep_frames
+            assert chain.shape[1] == data['positions'].shape[1]
+            assert chain.shape[2] == data['positions'].shape[2] + data['one_hot'].shape[2] + model.include_charges
 
-                # Saving chains
-                name = str(i + start)
-                chain_output = os.path.join(chains_output_dir, name)
-                os.makedirs(chain_output, exist_ok=True)
+            # Saving chains
+            name = str(i + start)
+            chain_output = os.path.join(chains_output_dir, name)
+            os.makedirs(chain_output, exist_ok=True)
 
-                one_hot = chain[:, :, 3:-1]
-                positions = chain[:, :, :3]
-                chain_node_mask = torch.cat([node_mask[i].unsqueeze(0) for _ in range(args.keep_frames)], dim=0)
-                names = [f'{name}_{j}' for j in range(args.keep_frames)]
+            one_hot = chain[:, :, 3:-1]
+            positions = chain[:, :, :3]
+            chain_node_mask = torch.cat([node_mask[i].unsqueeze(0) for _ in range(args.keep_frames)], dim=0)
+            names = [f'{name}_{j}' for j in range(args.keep_frames)]
 
-                save_xyz_file(chain_output, one_hot, positions, chain_node_mask, names=names, is_geom=model.is_geom)
-                visualize_chain_xai(
-                    chain_output,
-                    spheres_3d=False,
-                    alpha=0.7,
-                    bg='white',
-                    is_geom=model.is_geom,
-                    fragment_mask=data['fragment_mask'][i].squeeze(),
-                    phi_values=phi_atoms_distances
-                )
+            save_xyz_file(chain_output, one_hot, positions, chain_node_mask, names=names, is_geom=model.is_geom)
+            visualize_chain_xai(
+                chain_output,
+                spheres_3d=False,
+                alpha=0.7,
+                bg='white',
+                is_geom=model.is_geom,
+                fragment_mask=data['fragment_mask'][i].squeeze(),
+                phi_values=phi_atoms_distances
+            )
 
-                # Saving final prediction and ground truth separately
-                true_one_hot = data['one_hot'][i].unsqueeze(0)
-                true_positions = data['positions'][i].unsqueeze(0)
-                true_node_mask = data['atom_mask'][i].unsqueeze(0)
-                save_xyz_file(
-                    final_states_output_dir,
-                    true_one_hot,
-                    true_positions,
-                    true_node_mask,
-                    names=[f'{name}_true'],
-                    is_geom=model.is_geom,
-                )
+            # Saving final prediction and ground truth separately
+            true_one_hot = data['one_hot'][i].unsqueeze(0)
+            true_positions = data['positions'][i].unsqueeze(0)
+            true_node_mask = data['atom_mask'][i].unsqueeze(0)
+            save_xyz_file(
+                final_states_output_dir,
+                true_one_hot,
+                true_positions,
+                true_node_mask,
+                names=[f'{name}_true'],
+                is_geom=model.is_geom,
+            )
 
-                pred_one_hot = chain[0, :, 3:-1].unsqueeze(0)
-                pred_positions = chain[0, :, :3].unsqueeze(0)
-                pred_node_mask = chain_node_mask[0].unsqueeze(0)
-                save_xyz_file(
-                    final_states_output_dir,
-                    pred_one_hot,
-                    pred_positions,
-                    pred_node_mask,
-                    names=[f'{name}_pred'],
-                    is_geom=model.is_geom
-                )
+            pred_one_hot = chain[0, :, 3:-1].unsqueeze(0)
+            pred_positions = chain[0, :, :3].unsqueeze(0)
+            pred_node_mask = chain_node_mask[0].unsqueeze(0)
+            save_xyz_file(
+                final_states_output_dir,
+                pred_one_hot,
+                pred_positions,
+                pred_node_mask,
+                names=[f'{name}_pred'],
+                is_geom=model.is_geom
+            )
 
-            start += len(data['positions'])
+        start += len(data['positions'])
 
         
       

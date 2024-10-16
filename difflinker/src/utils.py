@@ -154,10 +154,13 @@ def center_gravity_zero_gaussian_log_likelihood_with_mask(x, node_mask):
 
     return log_px
 
-
-def sample_center_gravity_zero_gaussian_with_mask(size, device, node_mask):
+#@mastro edited, added noisy_positions
+def sample_center_gravity_zero_gaussian_with_mask(size, device, node_mask, noisy_positions = None):
     assert len(size) == 3
-    x = torch.randn(size, device=device)
+    if noisy_positions is not None:
+        x = noisy_positions.to(device)
+    else:
+        x = torch.randn(size, device=device)
 
     x_masked = x * node_mask
 
@@ -185,9 +188,13 @@ def standard_gaussian_log_likelihood_with_mask(x, node_mask):
     log_px = sum_except_batch(log_px_elementwise * node_mask)
     return log_px
 
-
-def sample_gaussian_with_mask(size, device, node_mask):
-    x = torch.randn(size, device=device)
+#@mastro edited, added noisy_features
+def sample_gaussian_with_mask(size, device, node_mask, noisy_features = None):
+    if noisy_features is not None:
+        x = noisy_features.to(device)
+    else:
+        x = torch.randn(size, device=device)
+        
     x_masked = x * node_mask
     return x_masked
 

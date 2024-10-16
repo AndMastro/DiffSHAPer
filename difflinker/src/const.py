@@ -2,7 +2,7 @@ import torch
 
 from rdkit import Chem
 
-RUNNING_DEVICE = 'cuda:0'
+RUNNING_DEVICE = 'cuda:7'
 
 TORCH_FLOAT = torch.float32
 TORCH_INT = torch.int8

@@ -340,12 +340,13 @@ class EDM(torch.nn.Module):
 
         return log_p_xh_given_z
 
+    #@mastro edited, added noisy_positions and noisy_features
     def sample_combined_position_feature_noise(self, n_samples, n_nodes, mask, noisy_positions = None, noisy_features = None):
         z_x = utils.sample_gaussian_with_mask(
             size=(n_samples, n_nodes, self.n_dims),
             device=mask.device,
             node_mask=mask,
-            noisy_positions = noisy_positions
+            noisy_features = noisy_positions
         )
         z_h = utils.sample_gaussian_with_mask(
             size=(n_samples, n_nodes, self.in_node_nf),

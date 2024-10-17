@@ -405,7 +405,8 @@ class DDPM(pl.LightningModule):
             **delinker_metrics
         }
 
-    def sample_chain(self, data, sample_fn=None, keep_frames=None):
+    #@mastro edited, added noisy_positions and noisy_features
+    def sample_chain(self, data, sample_fn=None, keep_frames=None, noisy_positions=None, noisy_features=None):
         if sample_fn is None:
             linker_sizes = data['linker_mask'].sum(1).view(-1).int()
         else:
@@ -453,6 +454,7 @@ class DDPM(pl.LightningModule):
             raise NotImplementedError(self.center_of_mass)
         x = utils.remove_partial_mean_with_mask(x, node_mask, center_of_mass_mask)
 
+        #@mastro edited, added noisy_positions and noisy_features
         chain = self.edm.sample_chain(
             x=x,
             h=h,
@@ -462,6 +464,8 @@ class DDPM(pl.LightningModule):
             linker_mask=linker_mask,
             context=context,
             keep_frames=keep_frames,
+            noisy_positions=noisy_positions,
+            noisy_features=noisy_features
         )
         return chain, node_mask
 

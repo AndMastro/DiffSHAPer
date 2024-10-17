@@ -126,8 +126,9 @@ class EDM(torch.nn.Module):
 
         return delta_log_px, kl_prior, loss_term_t, loss_term_0, l2_loss, noise_t, noise_0
 
+    # @mastro edited, added noisy_positions and noisy_features
     @torch.no_grad()
-    def sample_chain(self, x, h, node_mask, fragment_mask, linker_mask, edge_mask, context, keep_frames=None):
+    def sample_chain(self, x, h, node_mask, fragment_mask, linker_mask, edge_mask, context, keep_frames=None, noisy_positions = None, noisy_features = None):
         n_samples = x.size(0)
         n_nodes = x.size(1)
 
@@ -144,7 +145,7 @@ class EDM(torch.nn.Module):
         xh = torch.cat([x, h], dim=2)
 
         # Initial linker sampling from N(0, I)
-        z = self.sample_combined_position_feature_noise(n_samples, n_nodes, mask=linker_mask)
+        z = self.sample_combined_position_feature_noise(n_samples, n_nodes, mask=linker_mask, noisy_positions = noisy_positions, noisy_features = noisy_features)
         z = xh * fragment_mask + z * linker_mask
 
         if keep_frames is None:
@@ -339,16 +340,18 @@ class EDM(torch.nn.Module):
 
         return log_p_xh_given_z
 
-    def sample_combined_position_feature_noise(self, n_samples, n_nodes, mask):
+    def sample_combined_position_feature_noise(self, n_samples, n_nodes, mask, noisy_positions = None, noisy_features = None):
         z_x = utils.sample_gaussian_with_mask(
             size=(n_samples, n_nodes, self.n_dims),
             device=mask.device,
-            node_mask=mask
+            node_mask=mask,
+            noisy_positions = noisy_positions
         )
         z_h = utils.sample_gaussian_with_mask(
             size=(n_samples, n_nodes, self.in_node_nf),
             device=mask.device,
-            node_mask=mask
+            node_mask=mask,
+            noisy_features=noisy_features
         )
         z = torch.cat([z_x, z_h], dim=2)
         return z

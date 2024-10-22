@@ -18,9 +18,8 @@ import torch
 from src.datasets import get_dataloader
 from src.lightning import DDPM
 from src.molecule_builder import get_bond_order
-from src.visualizer import save_xyz_file, visualize_chain
+from src.visualizer import save_xyz_file
 from tqdm.auto import tqdm
-from pdb import set_trace
 import sys #@mastro
 from src import const #@mastro
 import numpy as np #@mastro
@@ -42,12 +41,12 @@ from pysmiles import read_smiles
 running_device = const.RUNNING_DEVICE
 
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
-# os.environ["https_proxy"] = "http://web-proxy.informatik.uni-bonn.de:3128"
-# os.environ["http_proxy"] = "http://web-proxy.informatik.uni-bonn.de:3128"
 # Simulate command-line arguments
 
 density = sys.argv[sys.argv.index("--P") + 1]
-
+seed = sys.argv[sys.argv.index("--seed") + 1]
+# SEED = 42
+# density = "0.5"
 sys.argv = [
     'ipykernel_launcher.py',
     '--checkpoint', 'models/zinc_difflinker.ckpt',
@@ -56,7 +55,8 @@ sys.argv = [
     '--prefix', 'zinc_final_test',
     '--keep_frames', '10',
     #'--device', 'cuda:0' #not used, it is set in the code
-    '--P', density
+    '--P', density,
+    '--seed', seed #1240 #14085
 ]
 
 
@@ -68,13 +68,14 @@ parser.add_argument('--data', action='store', type=str, required=False, default=
 parser.add_argument('--keep_frames', action='store', type=int, required=True)
 # parser.add_argument('--device', action='store', type=str, required=True) #not used, it is set in the code
 parser.add_argument('--P', action='store', type=str, required=True)
+parser.add_argument('--seed', action='store', type=int, required=True)
 args = parser.parse_args()
-
+SEED = args.seed
+print("seed is: ", SEED)
 args.device = running_device #@mastro
-SEED = 42
 experiment_name = args.checkpoint.split('/')[-1].replace('.ckpt', '')
-chains_output_dir = os.path.join(args.chains, experiment_name, args.prefix, 'chains_' + args.P)
-final_states_output_dir = os.path.join(args.chains, experiment_name, args.prefix, 'final_states_' + args.P)
+chains_output_dir = os.path.join(args.chains, experiment_name, args.prefix, 'chains_' + args.P + '_seed_' + str(SEED))
+final_states_output_dir = os.path.join(args.chains, experiment_name, args.prefix, 'final_states_' + args.P + '_seed_' + str(SEED))
 os.makedirs(chains_output_dir, exist_ok=True)
 os.makedirs(final_states_output_dir, exist_ok=True)
 
@@ -322,6 +323,59 @@ def compute_one_hot_similarity(mol1, mol2, mask1 = None, mask2 = None):
     
     return similarity
 
+def compute_hausdorff_distance_batch(mol1, mol2, mask1 = None, mask2 = None):
+    """
+    Compute the similarity between two molecules based on distances and atom type.
+    
+    Args:
+        mol1 (torch.Tensor): The first molecule.
+        mol2 (torch.Tensor): The second molecule.
+        mask1 (torch.Tensor, optional): A mask indicating which atoms to consider for mo1. If not provided, all atoms will be considered.
+        mask2 (torch.Tensor, optional): A mask indicating which atoms to consider for mol2. If not provided, all atoms will be considered.
+        
+    Returns:
+        torch.Tensor: The similarity between the two molecules for each element in the batch.
+    """
+    # If fragment_mask is provided, only consider the atoms in the mask
+
+    #take only the positions
+    mol1 = mol1[:, :, :3]
+    mol2 = mol2[:, :, :3]
+    
+    
+    if mask1 is not None:
+        mask1 = mask1.bool()
+        batch_size = mol1.shape[0]
+        masked_mol1 = []
+        for i in range(batch_size):
+            masked_mol1.append(mol1[i, mask1[i], :])
+        
+        if batch_size == 1:
+            mol1 = masked_mol1[0].unsqueeze(0)
+        else:    
+            mol1 = torch.stack(masked_mol1)
+        
+
+    if mask2 is not None:
+        mask2 = mask2.bool()
+        mask2 = mask2.bool()
+        batch_size = mol2.shape[0]
+        masked_mol2 = []
+        for i in range(batch_size):
+            masked_mol2.append(mol2[i, mask2[i], :])
+        
+        if batch_size == 1:
+            mol2 = masked_mol2[0].unsqueeze(0)
+        else:    
+            mol2 = torch.stack(masked_mol2)
+
+    hausdorff_distances = []
+    for i in range(mol1.shape[0]):
+        hausdorff_distances.append(max(directed_hausdorff(mol1[i], mol2[i])[0], directed_hausdorff(mol2[i], mol1[i])[0]))
+
+    return hausdorff_distances
+
+
 def create_edge_index(mol, weighted=False):
     """
     Create edge index for a molecule.
@@ -337,6 +391,9 @@ def create_edge_index(mol, weighted=False):
         return edge_index, edge_weight
 
     return edge_index
+
+def arrestomomentum():
+    raise KeyboardInterrupt("Debug interrupt.")
 
 
 # ## Explainability
@@ -396,21 +453,10 @@ def plot_molecule_xai(ax, positions, atom_type, alpha, spheres_3d, hex_bg_color,
                     alpha=alpha
                 )
 
-    # from pdb import set_trace
-    # set_trace()
+    
 
     if spheres_3d:
-        # idx = torch.where(fragment_mask[:len(x)] == 0)[0]
-        # ax.scatter(
-        #     x[idx],
-        #     y[idx],
-        #     z[idx],
-        #     alpha=0.9 * alpha,
-        #     edgecolors='#FCBA03',
-        #     facecolors='none',
-        #     linewidths=2,
-        #     s=900
-        # )
+        
         for i, j, k, s, c, f, phi in zip(x, y, z, radii, colors, fragment_mask, phi_values):
             if f == 1:
                 alpha = 1.0
@@ -422,23 +468,6 @@ def plot_molecule_xai(ax, positions, atom_type, alpha, spheres_3d, hex_bg_color,
     else:
         phi_values_array = np.array(list(phi_values.values()))
 
-        # #draw fragments
-        # fragment_mask_on_cpu = fragment_mask.cpu().numpy()
-        # colors_fragment = colors[fragment_mask_on_cpu == 1]
-        # x_fragment = x[fragment_mask_on_cpu == 1]
-        # y_fragment = y[fragment_mask_on_cpu == 1]
-        # z_fragment = z[fragment_mask_on_cpu == 1]
-        # areas_fragment = areas[fragment_mask_on_cpu == 1]
-        # ax.scatter(x_fragment, y_fragment, z_fragment, s=areas_fragment, alpha=0.9 * alpha, c=np.where(phi_values_array > 0, 'red', colors_fragment))
-
-        # #draw non-fragment atoms
-        # colors = colors[fragment_mask_on_cpu == 0]
-        # x = x[fragment_mask_on_cpu == 0]
-        # y = y[fragment_mask_on_cpu == 0]
-        # z = z[fragment_mask_on_cpu == 0]
-        # areas = areas[fragment_mask_on_cpu == 0]
-        # ax.scatter(x, y, z, s=areas, alpha=0.9 * alpha, c=colors)
-
         #draw fragments
         fragment_mask_on_cpu = fragment_mask.cpu().numpy()
         colors_fragment = colors[fragment_mask_on_cpu == 1]
@@ -448,7 +477,7 @@ def plot_molecule_xai(ax, positions, atom_type, alpha, spheres_3d, hex_bg_color,
         areas_fragment = areas[fragment_mask_on_cpu == 1]
         
         # Calculate the gradient colors based on phi values
-        cmap = plt.cm.get_cmap('coolwarm')
+        cmap = plt.cm.get_cmap('coolwarm_r') #reversed heatmap for distance-based importance
         norm = plt.Normalize(vmin=min(phi_values_array), vmax=max(phi_values_array))
         colors_fragment_shadow = cmap(norm(phi_values_array))
         
@@ -559,406 +588,9 @@ def visualize_chain_xai(
 
 # ### Explainabiliy phase
 
-# ##### One sampling step at a time
-
-# In[6]:
-
-
-# #@mastro
-# num_samples = 5
-# sampled = 0
-# #end @mastro
-# start = 0
-# bond_order_dict = {0:0, 1:0, 2:0, 3:0}
-# ATOM_SAMPLER = False
-# SAVE_VISUALIZATION = True
-# chain_with_full_fragments = None
-# M = 100 #number of Monte Carlo Sampling steps
-# P = 0.2 #probability of atom to exist in random graph (also edge in the future)
-
-# # Create the folder if it does not exist
-# folder_save_path = "results/explanations"
-# if not os.path.exists(folder_save_path):
-#     os.makedirs(folder_save_path)
-
-
-
-
-# for data in dataloader:
-    
-#     if sampled < num_samples:
-#         chain_with_full_fragments = None
-#         sampled += 1
-#         rng = default_rng(seed = SEED)
-#         # generate chain with original and full fragments
-#         print(data["positions"].shape)
-#         chain_batch, node_mask = model.sample_chain(data, keep_frames=args.keep_frames)
-
-#         # import gc
-
-#         # # Collect all objects
-#         # all_objects = gc.get_objects()
-
-#         # # Filter out tensors and print their devices
-#         # for obj in all_objects:
-#         #     if torch.is_tensor(obj):
-#         #         if obj.device == torch.device('cuda:0'):
-#         #             print(f"Tensor: {obj}, Device: {obj.device}")
-
-        
-
-#         # print(torch.cuda.memory_summary(device=0, abbreviated=False)) #@mastro
-#         # sys.exit() #@mastro
-        
-#         #get the generated molecule and store it in a variable
-#         chain_with_full_fragments = chain_batch[0, 0, :, :] #need to get only the final frame, is 0 ok in the first dimension?
-        
-#         # Compute distance of two chains
-#         mol_similarity = compute_molecular_similarity(chain_with_full_fragments.squeeze(), chain_with_full_fragments.squeeze(), mask1=data["linker_mask"][0].squeeze(), mask2=data["linker_mask"][0].squeeze())
-#         print("Similarity between the two chains:", mol_similarity.item())
-#         # compute similarity of one-hot vectors
-#         positional_similarity = compute_molecular_similarity_positions(chain_with_full_fragments.squeeze(), chain_with_full_fragments.squeeze(), mask1=data["linker_mask"][0].squeeze(), mask2=data["linker_mask"][0].squeeze())
-#         print("Similarity between the two chains based on positions:", positional_similarity.item())
-#         one_hot_similarity = compute_one_hot_similarity(chain_with_full_fragments.squeeze(), chain_with_full_fragments.squeeze(), mask1=data["linker_mask"][0].squeeze(), mask2=data["linker_mask"][0].squeeze())
-#         print("Similarity between the two one-hot vectors:", one_hot_similarity.item())
-#         # compute cosine similarity
-#         cos_simil = compute_cosine_similarity(chain_with_full_fragments.squeeze().cpu(), chain_with_full_fragments.squeeze().cpu(), mask1=data["linker_mask"][0].squeeze().cpu(), mask2=data["linker_mask"][0].squeeze().cpu())
-#         print("Cosine similarity between the two chains:", cos_simil)
-    
-        
-#         # display(data["fragment_mask"])
-#         # display(data["fragment_mask"].shape)
-
-#         # display(data["linker_mask"])
-#         # display(data["linker_mask"].shape)
-        
-#         # display(data["edge_mask"])
-#         # display(data["edge_mask"].shape)
-
-#         #mask out all edges that are not bonds
-#         # idx2atom = const.GEOM_IDX2ATOM if model.is_geom else const.IDX2ATOM
-      
-#         # positions = data["positions"][0].detach().cpu().numpy()
-#         # x  = positions[:,0]
-#         # y  = positions[:,1]
-#         # z  = positions[:,2]
-#         # # print(x)
-       
-#         # atom_type = torch.argmax(data["one_hot"][0], dim=1)
-#         # print("Number of edges", len(x) * len(x))
-#         # sys.exit()
-#         #uncomment to work on edge_mask (not huge effect, tho)
-#         # for i in range(len(x)):
-#         #     for j in range(i+1, len(x)):
-#         #         p1 = np.array([x[i], y[i], z[i]])
-#         #         p2 = np.array([x[j], y[j], z[j]])
-#         #         dist =  np.sqrt(np.sum((p1 - p2) ** 2)) #np.linalg.norm(p1-p2)
-                
-#         #         atom1, atom2 = idx2atom[atom_type[i].item()], idx2atom[atom_type[j].item()]
-#         #         bond_order = get_bond_order(atom1, atom2, dist)
-                
-#         #         bond_order_dict[bond_order] += 1
-#         #         # if bond_order <= 0: #TODO debug. Why not all set to 0?
-#         #         if True:
-#         #             data["edge_mask"][i * len(x) + j] = 0
-#         #             data["edge_mask"][j * len(x) + i] = 0
-#         #         #set all edge_mask indices to 0
-#         #         data["edge_mask"] = torch.zeros_like(data["edge_mask"])
-
-#         #randomly mask out 50% of atoms
-#         # mask = torch.rand(data["atom_mask"].shape) > 0.5
-#         # data["atom_mask"] = data["atom_mask"] * mask.to(model.device)
-#         #mask out all atoms
-#         # data["atom_mask"] = torch.zeros_like(data["atom_mask"])
-        
-#         #variables that will become function/class arguments/variables
-
-        
-#         num_fragment_atoms = torch.sum(data["fragment_mask"] == 1)
-
-        
-#         phi_atoms = {}
-#         fragment_indices = torch.where(data["fragment_mask"] == 1)[1]
-#         num_fragment_atoms = len(fragment_indices)
-#         num_atoms = data["positions"].shape[1]
-
-#         distances_random_samples = []
-#         cosine_similarities_random_samples = []
-
-#         for j in tqdm(range(num_fragment_atoms)):
-            
-#             marginal_contrib_distance = 0
-#             marginal_contrib_cosine_similarity = 0
-#             marginal_contrib_hausdorff = 0
-
-#             for step in tqdm(range(M)):
-#                 data_j_plus = data.copy()
-#                 data_j_minus = data.copy()
-#                 data_random = data.copy()
-
-#                 N_z_mask = rng.binomial(1, P, size = num_fragment_atoms)
-
-#                 # Ensure at least one element is 1, otherwise randomly select one since at least one fragment atom must be present
-#                 if not np.any(N_z_mask):
-#                     print("Zero elements in N_z_mask, randomly selecting one.")
-#                     random_index = rng.integers(0, num_fragment_atoms)
-#                     N_z_mask[random_index] = 1
-
-#                 # print("N_z_mask for sample", sampled, step, N_z_mask)
-
-#                 N_mask = torch.ones(num_fragment_atoms, dtype=torch.int)
-
-#                 pi = torch.randperm(num_fragment_atoms)
-
-#                 N_j_plus_index = torch.ones(num_fragment_atoms, dtype=torch.int)
-#                 N_j_minus_index = torch.ones(num_fragment_atoms, dtype=torch.int)
-#                 selected_node_index = np.where(pi == j)[0].item()
-                
-#                 # print("Selected node index", selected_node_index)
-#                 for k in range(num_fragment_atoms):
-#                     if k <= selected_node_index:
-#                         N_j_plus_index[pi[k]] = N_mask[pi[k]]
-#                     else:
-#                         N_j_plus_index[pi[k]] = N_z_mask[pi[k]]
-
-#                 for k in range(num_fragment_atoms):
-#                     if k < selected_node_index:
-#                         N_j_minus_index[pi[k]] = N_mask[pi[k]]
-#                     else:
-#                         N_j_minus_index[pi[k]] = N_z_mask[pi[k]]
-
-
-#                 # print("N_j_plus_index", N_j_plus_index)
-#                 # print("N_j_minus_index", N_j_minus_index)
-#                 # print(N_j_plus_index == N_j_minus_index)
-                
-#                 N_j_plus = fragment_indices[N_j_plus_index.bool()] #fragement indices to keep in molecule j plus
-#                 N_j_minus = fragment_indices[N_j_minus_index.bool()] #fragement indices to keep in molecule j minus
-
-#                 N_random_sample = fragment_indices[torch.IntTensor(N_z_mask).bool()] #fragement indices to keep in random molecule
-#                 # print("N_j_plus", N_j_plus)
-#                 # print("N_j_minus", N_j_minus)
-#                 # print(N_j_plus == N_j_minus)
-#                 atom_mask_j_plus = torch.zeros(num_atoms, dtype=torch.bool)
-#                 atom_mask_j_minus = torch.zeros(num_atoms, dtype=torch.bool)
-
-#                 atom_mask_random_molecule = torch.zeros(num_atoms, dtype=torch.bool)
-
-#                 atom_mask_j_plus[N_j_plus] = True
-#                 #set to true also linker atoms
-#                 atom_mask_j_plus[data["linker_mask"][0].squeeze().to(torch.int) == 1] = True
-#                 atom_mask_j_minus[N_j_minus] = True
-#                 #set to true also linker atoms
-#                 atom_mask_j_minus[data["linker_mask"][0].squeeze().to(torch.int) == 1] = True
-
-#                 atom_mask_random_molecule[N_random_sample] = True
-#                 #set to true also linker atoms
-#                 atom_mask_random_molecule[data["linker_mask"][0].squeeze().to(torch.int) == 1] = True
-
-#                 # print("Atom mask j plus", atom_mask_j_plus)
-#                 # print("Atom mask j minus", atom_mask_j_minus)
-#                 # print(atom_mask_j_minus==atom_mask_j_plus)
-
-#                 #for sample containing j
-#                 #remove positions of atoms in random_indices
-#                 data_j_plus["positions"] = data_j_plus["positions"][:, atom_mask_j_plus]
-#                 #remove one_hot of atoms in random_indices
-#                 data_j_plus["one_hot"] = data_j_plus["one_hot"][:, atom_mask_j_plus]
-#                 #remove atom_mask of atoms in random_indices
-#                 data_j_plus["atom_mask"] = data_j_plus["atom_mask"][:, atom_mask_j_plus]
-#                 #remove fragment_mask of atoms in random_indices
-#                 data_j_plus["fragment_mask"] =  data_j_plus["fragment_mask"][:, atom_mask_j_plus]
-#                 #remove linker_mask of atoms in random_indices
-#                 data_j_plus["linker_mask"] = data_j_plus["linker_mask"][:, atom_mask_j_plus]
-#                 #remove edge_mask of atoms in random_indices
-#                 for index in N_j_plus:
-#                     for i in range(num_atoms):
-#                         data_j_plus["edge_mask"][index * num_atoms + i] = 0
-#                         data_j_plus["edge_mask"][i * num_atoms + index] = 0
-
-#                 #remove all values in edge_mask that are 0
-#                 data_j_plus["edge_mask"] = data_j_plus["edge_mask"][data_j_plus["edge_mask"] != 0]  #to be checked, but working on atoms has as effect. For the moment we stick to atoms, then we move to edges (need to edit internal function for this, or redefine everything...)
-
-#                 # print("After removal j plus:", data_j_plus["positions"])
-#                 # print(data_j_plus["positions"].shape)
-                
-#                 #for sample not containing j
-#                 #remove positions of atoms in random_indices
-#                 data_j_minus["positions"] = data_j_minus["positions"][:, atom_mask_j_minus]
-#                 #remove one_hot of atoms in random_indices
-#                 data_j_minus["one_hot"] = data_j_minus["one_hot"][:, atom_mask_j_minus]
-#                 #remove atom_mask of atoms in random_indices
-#                 data_j_minus["atom_mask"] = data_j_minus["atom_mask"][:, atom_mask_j_minus]
-#                 #remove fragment_mask of atoms in random_indices
-#                 data_j_minus["fragment_mask"] =  data_j_minus["fragment_mask"][:, atom_mask_j_minus]
-#                 #remove linker_mask of atoms in random_indices
-#                 data_j_minus["linker_mask"] = data_j_minus["linker_mask"][:, atom_mask_j_minus]
-#                 #remove edge_mask of atoms in random_indices
-#                 for index in N_j_minus:
-#                     for i in range(num_atoms):
-#                         data_j_minus["edge_mask"][index * num_atoms + i] = 0
-#                         data_j_minus["edge_mask"][i * num_atoms + index] = 0
-
-#                 #remove all values in edge_mask that are 0
-#                 data_j_minus["edge_mask"] = data_j_minus["edge_mask"][data_j_minus["edge_mask"] != 0]  #to be checked, but working on atoms has as effect. For the moment we stick to atoms, then we move to edges (need to edit internal function for this, or redefine everything...)
-
-#                 # print("After removal j minus:", data_j_minus["positions"])
-#                 # print(data_j_minus["positions"].shape)
-
-#                 #for random sample
-#                 data_random["positions"] = data_random["positions"][:, atom_mask_random_molecule]
-#                 #remove one_hot of atoms in random_indices
-#                 data_random["one_hot"] = data_random["one_hot"][:, atom_mask_random_molecule]
-#                 #remove atom_mask of atoms in random_indices
-#                 data_random["atom_mask"] = data_random["atom_mask"][:, atom_mask_random_molecule]
-#                 #remove fragment_mask of atoms in random_indices
-#                 data_random["fragment_mask"] =  data_random["fragment_mask"][:, atom_mask_random_molecule]
-#                 #remove linker_mask of atoms in random_indices
-#                 data_random["linker_mask"] = data_random["linker_mask"][:, atom_mask_random_molecule]
-#                 #remove edge_mask of atoms in random_indices
-#                 for index in N_z_mask:
-#                     for i in range(num_atoms):
-#                         data_random["edge_mask"][index * num_atoms + i] = 0
-#                         data_random["edge_mask"][i * num_atoms + index] = 0
-
-#                 #remove all values in edge_mask that are 0
-#                 data_random["edge_mask"] = data_random["edge_mask"][data_random["edge_mask"] != 0] 
-
-
-
-#                 #with node j
-#                 chain_j_plus, node_mask_j_plus = model.sample_chain(data_j_plus, keep_frames=args.keep_frames)
-#                 #take only the ts 0 frame
-#                 chain_j_plus = chain_j_plus[0, 0, :, :]
-                
-            
-#                 V_j_plus_distance = compute_molecular_distance(chain_with_full_fragments.squeeze(), chain_j_plus.squeeze(), mask1=data["linker_mask"][0].squeeze(), mask2=data_j_plus["linker_mask"][0].squeeze())
-
-#                 V_j_plus_cosine_similarity = compute_cosine_similarity(chain_with_full_fragments.squeeze().cpu(), chain_j_plus.squeeze().cpu(), mask1=data["linker_mask"][0].squeeze().cpu(), mask2=data_j_plus["linker_mask"][0].squeeze().cpu())
-
-#                 # print("V_j_plus", V_j_plus)
-
-#                 #without node j
-#                 chain_j_minus, node_mask_j_minus = model.sample_chain(data_j_minus, keep_frames=args.keep_frames)
-
-#                 #take only the ts 0 frame
-#                 chain_j_minus = chain_j_minus[0, 0, :, :]
-
-#                 V_j_minus_distance = compute_molecular_distance(chain_with_full_fragments.squeeze(), chain_j_minus.squeeze(), mask1=data["linker_mask"][0].squeeze(), mask2=data_j_minus["linker_mask"][0].squeeze())
-
-#                 V_j_minus_cosine_similarity = compute_cosine_similarity(chain_with_full_fragments.squeeze().cpu(), chain_j_minus.squeeze().cpu(), mask1=data["linker_mask"][0].squeeze().cpu(), mask2=data_j_minus["linker_mask"][0].squeeze().cpu())
-
-#                 #with random sample
-#                 chain_random, node_mask_random = model.sample_chain(data_random, keep_frames=args.keep_frames)
-
-#                 chain_random = chain_random[0, 0, :, :]
-
-#                 V_random_distance = compute_molecular_distance(chain_with_full_fragments.squeeze(), chain_random.squeeze(), mask1=data["linker_mask"][0].squeeze(), mask2=data_random["linker_mask"][0].squeeze())
-
-#                 V_random_cosine_similarity = compute_cosine_similarity(chain_with_full_fragments.squeeze().cpu(), chain_random.squeeze().cpu(), mask1=data["linker_mask"][0].squeeze().cpu(), mask2=data_random["linker_mask"][0].squeeze().cpu())
-
-#                 distances_random_samples.append(V_random_distance)
-#                 cosine_similarities_random_samples.append(V_random_cosine_similarity)
-
-#                 # print(V_random_distance, V_random_cosine_similarity)
-                
-#                 marginal_contrib_distance += (V_j_plus_distance - V_j_minus_distance)
-
-#                 marginal_contrib_cosine_similarity += (V_j_plus_cosine_similarity - V_j_minus_cosine_similarity)
-
-#                 # marginal_contrib_hausdorff += (V_j_plus_hausdorff - V_j_minus_hausdorff)
-
-#             phi_atoms[fragment_indices[j].item()] = [0,0] #,0]    
-#             phi_atoms[fragment_indices[j].item()][0] = marginal_contrib_distance/M #j is the index of the fragment atom in the fragment indices tensor
-#             phi_atoms[fragment_indices[j].item()][1] = marginal_contrib_cosine_similarity/M
-#             # phi_atoms[fragment_indices[j]][2] = marginal_contrib_hausdorff/M
-
-#             print(data["name"])
-
-#         phi_atoms_distances = {}
-#         phi_atoms_cosine_similarity = {}
-#         for atom_index, phi_values in phi_atoms.items():
-#             phi_atoms_distances[atom_index] = phi_values[0]
-#             phi_atoms_cosine_similarity[atom_index] = phi_values[1]
-
-#         if SAVE_VISUALIZATION:
-#             for i in range(len(data['positions'])):
-#                 chain = chain_batch[:, i, :, :]
-#                 assert chain.shape[0] == args.keep_frames
-#                 assert chain.shape[1] == data['positions'].shape[1]
-#                 assert chain.shape[2] == data['positions'].shape[2] + data['one_hot'].shape[2] + model.include_charges
-
-#                 # Saving chains
-#                 name = str(i + start)
-#                 chain_output = os.path.join(chains_output_dir, name)
-#                 os.makedirs(chain_output, exist_ok=True)
-
-#                 one_hot = chain[:, :, 3:-1]
-#                 positions = chain[:, :, :3]
-#                 chain_node_mask = torch.cat([node_mask[i].unsqueeze(0) for _ in range(args.keep_frames)], dim=0)
-#                 names = [f'{name}_{j}' for j in range(args.keep_frames)]
-
-#                 save_xyz_file(chain_output, one_hot, positions, chain_node_mask, names=names, is_geom=model.is_geom)
-#                 visualize_chain_xai(
-#                     chain_output,
-#                     spheres_3d=False,
-#                     alpha=0.7,
-#                     bg='white',
-#                     is_geom=model.is_geom,
-#                     fragment_mask=data['fragment_mask'][i].squeeze(),
-#                     phi_values=phi_atoms_distances
-#                 )
-
-#                 # Saving final prediction and ground truth separately
-#                 true_one_hot = data['one_hot'][i].unsqueeze(0)
-#                 true_positions = data['positions'][i].unsqueeze(0)
-#                 true_node_mask = data['atom_mask'][i].unsqueeze(0)
-#                 save_xyz_file(
-#                     final_states_output_dir,
-#                     true_one_hot,
-#                     true_positions,
-#                     true_node_mask,
-#                     names=[f'{name}_true'],
-#                     is_geom=model.is_geom,
-#                 )
-
-#                 pred_one_hot = chain[0, :, 3:-1].unsqueeze(0)
-#                 pred_positions = chain[0, :, :3].unsqueeze(0)
-#                 pred_node_mask = chain_node_mask[0].unsqueeze(0)
-#                 save_xyz_file(
-#                     final_states_output_dir,
-#                     pred_one_hot,
-#                     pred_positions,
-#                     pred_node_mask,
-#                     names=[f'{name}_pred'],
-#                     is_geom=model.is_geom
-#                 )
-
-#             start += len(data['positions'])
-
-#         # Save phi_atoms to a text file
-#         with open(f'{folder_save_path}/phi_atoms_{sampled}.txt', 'w') as write_file:
-#             write_file.write("sample name: " + str(data["name"]) + "\n")
-#             write_file.write("atom_index,distance,cosine_similarity\n")
-#             for atom_index, phi_values in phi_atoms.items():
-#                 write_file.write(f"{atom_index},{phi_values[0]},{phi_values[1]}\n")
-
-#             write_file.write("\n")
-#             #save sum of phi values for disance and cosine similarity
-#             write_file.write("Sum of phi values for distance\n")
-#             write_file.write(str(sum([p_values[0] for p_values in phi_atoms.values()])) + "\n")
-#             write_file.write("Sum of phi values for cosine similarity\n")
-#             write_file.write(str(sum([p_values[1] for p_values in phi_atoms.values()])) + "\n")     
-#             write_file.write("Distance random samples\n")
-#             write_file.write(str(distances_random_samples) + "\n")
-#             write_file.write("Cosine similarity random samples\n")
-#             write_file.write(str(cosine_similarities_random_samples) + "\n")
-      
-
-
 # ##### Multiple sampling steps at a time
 
-# In[7]:
+# In[6]:
 
 
 #@mastro
@@ -975,7 +607,7 @@ M = 100 #100 #number of Monte Carlo Sampling steps
 P = None #probability of atom to exist in random graph (also edge in the future)
 PARALLEL_STEPS = 100
 # Create the folder if it does not exist
-folder_save_path = "results/explanations_" + args.P
+folder_save_path = "results/explanations_" + args.P + "_seed_" + str(SEED)
 if not os.path.exists(folder_save_path):
     os.makedirs(folder_save_path)
 
@@ -986,10 +618,67 @@ for data in dataloader:
         data_list.append(data)
         sampled += 1
 
+#determine max numebr of atoms of the molecules in the dataset. This is used to determine the size of the random noise, which we want to be equal for all molecules -> atoms not present in the molecule will be discarded using masks 
+max_num_atoms = max(data["positions"].shape[1] for data in data_list)
+
+# Pad all elements in data_list to have the same number of atoms
+# for i, data in enumerate(data_list):
+#     num_atoms_to_stack = max_num_atoms - data["positions"].shape[1]
+    
+#     # Pad positions
+#     padding = torch.zeros(data["positions"].shape[0], num_atoms_to_stack, data["positions"].shape[2]).to(args.device)
+#     data_list[i]["positions"] = torch.cat((data["positions"], padding), dim=1)
+    
+#     # Pad one_hot
+#     padding = torch.zeros(data["one_hot"].shape[0], num_atoms_to_stack, data["one_hot"].shape[2]).to(args.device)
+#     data_list[i]["one_hot"] = torch.cat((data["one_hot"], padding), dim=1)
+    
+#     # Pad charges
+#     padding = torch.zeros(data["charges"].shape[0], num_atoms_to_stack, data["charges"].shape[2]).to(args.device)
+#     data_list[i]["charges"] = torch.cat((data["charges"], padding), dim=1)
+    
+#     # Pad anchors
+#     padding = torch.zeros(data["anchors"].shape[0], num_atoms_to_stack, data["anchors"].shape[2]).to(args.device)
+#     data_list[i]["anchors"] = torch.cat((data["anchors"], padding), dim=1)
+    
+#     # Pad fragment_mask
+#     padding = torch.zeros(data["fragment_mask"].shape[0], num_atoms_to_stack, data["fragment_mask"].shape[2]).to(args.device)
+#     data_list[i]["fragment_mask"] = torch.cat((data["fragment_mask"], padding), dim=1)
+    
+#     # Pad linker_mask
+#     padding = torch.zeros(data["linker_mask"].shape[0], num_atoms_to_stack, data["linker_mask"].shape[2]).to(args.device)
+#     data_list[i]["linker_mask"] = torch.cat((data["linker_mask"], padding), dim=1)
+    
+#     # Pad atom_mask
+#     padding = torch.zeros(data["atom_mask"].shape[0], num_atoms_to_stack, data["atom_mask"].shape[2]).to(args.device)
+#     data_list[i]["atom_mask"] = torch.cat((data["atom_mask"], padding), dim=1)
+
+#define initial random noise for positions and features #shape = [1, max_num_atoms, 3] for positions and [1, max_num_atoms, 8] for features. 1 since batch size is 1 for our explaination task
+pos_size = (data_list[0]["positions"].shape[0], max_num_atoms, data_list[0]["positions"].shape[2])
+feature_size = (data_list[0]["one_hot"].shape[0], max_num_atoms, data_list[0]["one_hot"].shape[2])
+
+noisy_positions = torch.randn(pos_size, device=args.device)
+noisy_features = torch.randn(feature_size, device=args.device)
+
+# print("Noisy positions size:", pos_size)
+# print("Noisy features size:", feature_size)
+# print("Noisy positions:", noisy_positions)
+# print("Noisy features:", noisy_features)
+
+#save the noisy positions and features on file .txt
+noisy_positions_file = os.path.join(folder_save_path, "noisy_positions_seed_" + str(SEED) + ".txt")
+noisy_features_file = os.path.join(folder_save_path, "noisy_features_seed_" + str(SEED) + ".txt")
+
+with open(noisy_positions_file, "w") as f:
+    f.write(str(noisy_positions))
+
+with open(noisy_features_file, "w") as f:
+    f.write(str(noisy_features))
+
 for data_index, data in enumerate(tqdm(data_list)): #7:
 
         # start_time = time.time()
-
+        
         smile = data["name"][0]
         
         mol = read_smiles(smile)
@@ -1007,10 +696,6 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
         node_edge_ratio = num_nodes/num_edges
         
         edge_node_ratio = num_edges/num_nodes
-        print("Graph density:", graph_density)
-        print("Node density:", node_density)
-        print("Node-edge ratio:", node_edge_ratio)
-        print("Edge-node ratio:", edge_node_ratio)
         
         if args.P == "graph_density":
             P = graph_density #probability of atom to exist in random graph (not sure if correct approach, this was correct for edges)
@@ -1038,32 +723,49 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
         rng_torch = torch.Generator(device="cpu")
         rng_torch.manual_seed(SEED)
         # generate chain with original and full fragments
-       
-        chain_batch, node_mask = model.sample_chain(data, keep_frames=args.keep_frames)
+        
+        #filter the noisy positions and features to have the same size as the data, removing the atoms not actually present in the molecule
+        #we use the same max sized noise for all molecules to guaranteethat the same moleclues are inzialized with the same noise for the linker atoms in common -> noise for the fragme atoms will be discarded
+        noisy_positions_present_atoms = noisy_positions.clone()
+        noisy_features_present_atoms = noisy_features.clone()
+
+        noisy_positions_present_atoms = noisy_positions_present_atoms[:, :data["positions"].shape[1], :]
+        noisy_features_present_atoms = noisy_features_present_atoms[:, :data["one_hot"].shape[1], :]
+
+        # print("Filtered noisy positions:", noisy_positions_present_atoms)
+        # print("Filtered noisy features:", noisy_positions_present_atoms)
+        chain_batch, node_mask = model.sample_chain(data, keep_frames=args.keep_frames, noisy_positions=noisy_positions_present_atoms, noisy_features=noisy_features_present_atoms)
         
         #get the generated molecule and store it in a variable
         chain_with_full_fragments = chain_batch[0, :, :, :] #need to get only the final frame, is 0 ok in the first dimension?
         
-        # Compute distance of two chains
-        mol_similarity = compute_molecular_similarity(chain_with_full_fragments.squeeze(), chain_with_full_fragments.squeeze(), mask1=data["linker_mask"][0].squeeze(), mask2=data["linker_mask"][0].squeeze())
-        print("Similarity between the two chains:", mol_similarity.item())
-        #compute molecular distance using batches
+        # # Compute distance of two chains
+        # mol_similarity = compute_molecular_similarity(chain_with_full_fragments.squeeze(), chain_with_full_fragments.squeeze(), mask1=data["linker_mask"][0].squeeze(), mask2=data["linker_mask"][0].squeeze())
+        # print("Similarity between the two chains:", mol_similarity.item())
+        # #compute molecular distance using batches
         original_linker_mask_batch = data["linker_mask"][0].squeeze().repeat(PARALLEL_STEPS, 1) #check why it works
         
-        mol_distance = compute_molecular_distance_batch(chain_with_full_fragments, chain_with_full_fragments, mask1=original_linker_mask_batch, mask2=original_linker_mask_batch)
-        print("Molecular distance using batches: ", mol_distance)
+        # mol_distance = compute_molecular_distance_batch(chain_with_full_fragments, chain_with_full_fragments, mask1=original_linker_mask_batch, mask2=original_linker_mask_batch)
+        # print("Molecular distance using batches: ", mol_distance)
         
-        # compute similarity of one-hot vectors
-        positional_similarity = compute_molecular_similarity_positions(chain_with_full_fragments.squeeze(), chain_with_full_fragments.squeeze(), mask1=data["linker_mask"][0].squeeze(), mask2=data["linker_mask"][0].squeeze())
-        print("Similarity between the two chains based on positions:", positional_similarity.item())
-        one_hot_similarity = compute_one_hot_similarity(chain_with_full_fragments.squeeze(), chain_with_full_fragments.squeeze(), mask1=data["linker_mask"][0].squeeze(), mask2=data["linker_mask"][0].squeeze())
-        print("Similarity between the two one-hot vectors:", one_hot_similarity.item())
-        # compute cosine similarity
-        cos_simil = compute_cosine_similarity(chain_with_full_fragments.squeeze().cpu(), chain_with_full_fragments.squeeze().cpu(), mask1=data["linker_mask"][0].squeeze().cpu(), mask2=data["linker_mask"][0].squeeze().cpu())
-        print("Cosine similarity between the two chains:", cos_simil)
-        cos_simil_batch = compute_cosine_similarity_batch(chain_with_full_fragments.cpu(), chain_with_full_fragments.cpu(), mask1=original_linker_mask_batch.cpu(), mask2=original_linker_mask_batch.cpu())
-        print("Cosine similarity between the two chains using batches:", cos_simil_batch)
-       
+        # # compute similarity of one-hot vectors
+        # positional_similarity = compute_molecular_similarity_positions(chain_with_full_fragments.squeeze(), chain_with_full_fragments.squeeze(), mask1=data["linker_mask"][0].squeeze(), mask2=data["linker_mask"][0].squeeze())
+        # print("Similarity between the two chains based on positions:", positional_similarity.item())
+        # one_hot_similarity = compute_one_hot_similarity(chain_with_full_fragments.squeeze(), chain_with_full_fragments.squeeze(), mask1=data["linker_mask"][0].squeeze(), mask2=data["linker_mask"][0].squeeze())
+        # print("Similarity between the two one-hot vectors:", one_hot_similarity.item())
+
+        # # compute cosine similarity
+        # cos_simil = compute_cosine_similarity(chain_with_full_fragments.squeeze().cpu(), chain_with_full_fragments.squeeze().cpu(), mask1=data["linker_mask"][0].squeeze().cpu(), mask2=data["linker_mask"][0].squeeze().cpu())
+        # print("Cosine similarity between the two chains:", cos_simil)
+        # cos_simil_batch = compute_cosine_similarity_batch(chain_with_full_fragments.cpu(), chain_with_full_fragments.cpu(), mask1=original_linker_mask_batch.cpu(), mask2=original_linker_mask_batch.cpu())
+        # print("Cosine similarity between the two chains using batches:", cos_simil_batch)
+
+        # #compute hausdorff distance
+        # hausdorff_distance = compute_hausdorff_distance_batch(chain_with_full_fragments.cpu(), chain_with_full_fragments.cpu(), mask1=original_linker_mask_batch.cpu(), mask2=original_linker_mask_batch.cpu())
+
+        # print("Hausdorff distance between the two chains:", hausdorff_distance)
+        
+        
         num_fragment_atoms = torch.sum(data["fragment_mask"] == 1)
 
         phi_atoms = {}
@@ -1073,6 +775,7 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
         
         distances_random_samples = []
         cosine_similarities_random_samples = []
+        hausdorff_distances_random_samples = []
 
         # end_time = time.time()
         # print("Time to compute similarities in seconds:", end_time - start_time)
@@ -1166,7 +869,7 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
                 #fragement indices to keep in random molecule
                 N_random_sample = fragment_indices[(N_z_mask==1)] 
                 
-                print("N random sample", N_random_sample)
+                # print("N random sample", N_random_sample)
                 atom_mask_j_plus = torch.zeros(num_atoms*PARALLEL_STEPS, dtype=torch.bool)
                 atom_mask_j_minus = torch.zeros(num_atoms*PARALLEL_STEPS, dtype=torch.bool)
                 atom_mask_random_molecule = torch.zeros(num_atoms*PARALLEL_STEPS, dtype=torch.bool)
@@ -1198,8 +901,38 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
                 data_j_minus_dict = {}
                 data_random_dict = {}
 
+                noisy_features_j_plus_dict = {}
+                noisy_positions_j_plus_dict = {}
+                noisy_features_j_minus_dict = {}
+                noisy_positions_j_minus_dict = {}
+                noisy_features_random_dict = {}
+                noisy_positions_random_dict = {}
+                
                 # start_time = time.time()
                 for i in range(PARALLEL_STEPS):
+
+                    # Remove fragment atoms that are not present for j plus
+                    noisy_features_present_atoms_j_plus = noisy_features_present_atoms.clone()
+                    noisy_features_j_plus_dict[i] = noisy_features_present_atoms_j_plus[:, atom_mask_j_plus[i], :]
+                    
+                    noisy_positions_present_atoms_j_plus = noisy_positions_present_atoms.clone()
+                    noisy_positions_j_plus_dict[i] = noisy_positions_present_atoms_j_plus[:, atom_mask_j_plus[i], :]
+
+                    # Remove fragment atoms that are not present for j minus
+                    noisy_features_present_atoms_j_minus = noisy_features_present_atoms.clone()
+                    noisy_features_j_minus_dict[i] = noisy_features_present_atoms_j_minus[:, atom_mask_j_minus[i], :]
+
+                    noisy_positions_present_atoms_j_minus = noisy_positions_present_atoms.clone()
+                    noisy_positions_j_minus_dict[i] = noisy_positions_present_atoms_j_minus[:, atom_mask_j_minus[i], :]
+
+                    # Remove fragment atoms that are not present for random molecule
+                    noisy_features_present_atoms_random = noisy_features_present_atoms.clone()
+                    noisy_features_random_dict[i] = noisy_features_present_atoms_random[:, atom_mask_random_molecule[i], :]
+
+                    noisy_positions_present_atoms_random = noisy_positions_present_atoms.clone()
+                    noisy_positions_random_dict[i] = noisy_positions_present_atoms_random[:, atom_mask_random_molecule[i], :]
+
+
                     data_j_plus_dict[i] = data.copy()
                     data_j_minus_dict[i] = data.copy()
                     data_random_dict[i] = data.copy()
@@ -1308,6 +1041,17 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
                         stacked_edge_mask = torch.cat((data_j_plus_dict[i]["edge_mask"], padding), dim=1)
                         data_j_plus_dict[i]["edge_mask"] = stacked_edge_mask
                         
+                        #for noisy positions and features for j plus
+                        noisy_positions_j_plus_dict[i] = noisy_positions_j_plus_dict[i] #check this
+                        padding = torch.zeros(noisy_positions_j_plus_dict[i].shape[0], num_atoms_to_stack, noisy_positions_j_plus_dict[i].shape[2]).to(args.device)
+                        stacked_positions = torch.cat((noisy_positions_j_plus_dict[i], padding), dim=1)
+                        noisy_positions_j_plus_dict[i] = stacked_positions
+
+                        noisy_features_j_plus_dict[i] = noisy_features_j_plus_dict[i]
+                        padding = torch.zeros(noisy_features_j_plus_dict[i].shape[0], num_atoms_to_stack, noisy_features_j_plus_dict[i].shape[2]).to(args.device)
+                        stacked_features = torch.cat((noisy_features_j_plus_dict[i], padding), dim=1)
+                        noisy_features_j_plus_dict[i] = stacked_features
+
                         #for j minus
                         num_atoms_to_stack = max_atoms_j_minus - data_j_minus_dict[i]["positions"].shape[1]
                         padding = torch.zeros(data_j_minus_dict[i]["positions"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["positions"].shape[2]).to(args.device) #why does this work?
@@ -1345,6 +1089,16 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
                         stacked_edge_mask = torch.cat((data_j_minus_dict[i]["edge_mask"], padding), dim=1)
                         data_j_minus_dict[i]["edge_mask"] = stacked_edge_mask
                     
+                        #for noisy positions and features for j plus
+                        noisy_positions_j_minus_dict[i] = noisy_positions_j_minus_dict[i] #check this
+                        padding = torch.zeros(noisy_positions_j_minus_dict[i].shape[0], num_atoms_to_stack, noisy_positions_j_minus_dict[i].shape[2]).to(args.device)
+                        stacked_positions = torch.cat((noisy_positions_j_minus_dict[i], padding), dim=1)
+                        noisy_positions_j_minus_dict[i] = stacked_positions
+
+                        noisy_features_j_minus_dict[i] = noisy_features_j_minus_dict[i]
+                        padding = torch.zeros(noisy_features_j_minus_dict[i].shape[0], num_atoms_to_stack, noisy_features_j_minus_dict[i].shape[2]).to(args.device)
+                        stacked_features = torch.cat((noisy_features_j_minus_dict[i], padding), dim=1)
+                        noisy_features_j_minus_dict[i] = stacked_features
 
                         #for random
                         num_atoms_to_stack = max_atoms_random - data_random_dict[i]["positions"].shape[1]
@@ -1383,6 +1137,19 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
                         padding = torch.zeros(data_random_dict[i]["edge_mask"].shape[0], num_edges_to_stack, data_random_dict[i]["edge_mask"].shape[2]).to(args.device)
                         stacked_edge_mask = torch.cat((data_random_dict[i]["edge_mask"], padding), dim=1)
                         data_random_dict[i]["edge_mask"] = stacked_edge_mask
+
+                        #for noisy positions and features for j plus
+                        noisy_positions_random_dict[i] = noisy_positions_random_dict[i] #check this
+                        padding = torch.zeros(noisy_positions_random_dict[i].shape[0], num_atoms_to_stack, noisy_positions_random_dict[i].shape[2]).to(args.device)
+                        stacked_positions = torch.cat((noisy_positions_random_dict[i], padding), dim=1)
+                        noisy_positions_random_dict[i] = stacked_positions
+
+                        noisy_features_random_dict[i] = noisy_features_random_dict[i]
+                        padding = torch.zeros(noisy_features_random_dict[i].shape[0], num_atoms_to_stack, noisy_features_random_dict[i].shape[2]).to(args.device)
+                        stacked_features = torch.cat((noisy_features_random_dict[i], padding), dim=1)
+                        noisy_features_random_dict[i] = stacked_features
+                        
+                        
 
                 # end_time = time.time()
                 # print("Time to pad molecules in seconds:", end_time - start_time)
@@ -1439,16 +1206,31 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
                 # print("Time to create batches for j plus, j minus and random molecule in seconds:", end_time - start_time)
 
                 # start_time = time.time()
-               
-                chain_j_plus_batch, node_mask_j_plus_batch = model.sample_chain(data_j_plus_batch, keep_frames=args.keep_frames)
+                #create batches for noisy positions and features
+                noisy_positions_batch_j_plus = torch.stack([noisy_positions_j_plus_dict[i] for i in range(PARALLEL_STEPS)], dim=0).squeeze()
+                noisy_features_batch_j_plus = torch.stack([noisy_features_j_plus_dict[i] for i in range(PARALLEL_STEPS)], dim=0).squeeze()
+
+                noisy_positions_batch_j_minus = torch.stack([noisy_positions_j_minus_dict[i] for i in range(PARALLEL_STEPS)], dim=0).squeeze()
+                noisy_features_batch_j_minus = torch.stack([noisy_features_j_minus_dict[i] for i in range(PARALLEL_STEPS)], dim=0).squeeze()
+
+                noisy_positions_batch_random = torch.stack([noisy_positions_random_dict[i] for i in range(PARALLEL_STEPS)], dim=0).squeeze()
+                noisy_features_batch_random = torch.stack([noisy_features_random_dict[i] for i in range(PARALLEL_STEPS)], dim=0).squeeze()
+                
+                # print("Noisy position batch j plus shape", noisy_positions_batch_j_plus.shape)
+                # print("Noisy features batch j plus shape", noisy_features_batch_j_plus.shape)
+                # print("data j plus batch positions shape", data_j_plus_batch["positions"].shape)
+
+                
+                chain_j_plus_batch, node_mask_j_plus_batch = model.sample_chain(data_j_plus_batch, keep_frames=args.keep_frames, noisy_positions=noisy_positions_batch_j_plus, noisy_features=noisy_features_batch_j_plus)
 
                 chain_j_plus = chain_j_plus_batch[0, :, :, :] #it should take the first frame and all batch elements -> check it is really the first frame (I need the one at t0, the final generated molecule)
                 
-                chain_j_minus_batch, node_mask_j_minus_batch = model.sample_chain(data_j_minus_batch, keep_frames=args.keep_frames)
 
-                chain_j_minus = chain_j_minus_batch[0, :, :, :] 
+                chain_j_minus_batch, node_mask_j_minus_batch = model.sample_chain(data_j_minus_batch, keep_frames=args.keep_frames, noisy_positions=noisy_positions_batch_j_minus, noisy_features=noisy_features_batch_j_minus)
 
-                chain_random_batch, node_mask_random_batch = model.sample_chain(data_random_batch, keep_frames=args.keep_frames)
+                chain_j_minus = chain_j_minus_batch[0, :, :, :]
+
+                chain_random_batch, node_mask_random_batch = model.sample_chain(data_random_batch, keep_frames=args.keep_frames, noisy_positions=noisy_positions_batch_random, noisy_features=noisy_features_batch_random)
 
                 chain_random = chain_random_batch[0, :, :, :]
                 
@@ -1471,6 +1253,9 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
 
                 V_j_plus_cosine_similarity = sum(V_j_plus_cosine_similarity_batch)
                 
+                V_j_plus_hausdorff_batch = compute_hausdorff_distance_batch(chain_with_full_fragments_batch.cpu(), chain_j_plus.cpu(), mask1=original_linker_mask_batch.cpu(), mask2=data_j_plus_batch["linker_mask"].squeeze().cpu())
+                
+                V_j_plus_hausdorff = sum(V_j_plus_hausdorff_batch)
 
                 V_j_minus_distance_batch = compute_molecular_distance_batch(chain_with_full_fragments_batch, chain_j_minus, mask1=original_linker_mask_batch, mask2=data_j_minus_batch["linker_mask"].squeeze())
 
@@ -1481,68 +1266,83 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
 
                 V_j_minus_cosine_similarity = sum(V_j_minus_cosine_similarity_batch)
 
-                
+                V_j_minus_hausdorff_batch = compute_hausdorff_distance_batch(chain_with_full_fragments_batch.cpu(), chain_j_minus.cpu(), mask1=original_linker_mask_batch.cpu(), mask2=data_j_minus_batch["linker_mask"].squeeze().cpu())
+
+                V_j_minus_hausdorff = sum(V_j_minus_hausdorff_batch)
 
                 V_random_distance_batch = compute_molecular_distance_batch(chain_with_full_fragments_batch, chain_random, mask1=original_linker_mask_batch, mask2=data_random_batch["linker_mask"].squeeze())
                 
-                
-                
 
                 V_random_cosine_similarity = compute_cosine_similarity_batch(chain_with_full_fragments_batch.cpu(), chain_random.cpu(), mask1=original_linker_mask_batch.cpu(), mask2=data_random_batch["linker_mask"].squeeze().cpu())
+
+                V_random_hausdorff_batch = compute_hausdorff_distance_batch(chain_with_full_fragments_batch.cpu(), chain_random.cpu(), mask1=original_linker_mask_batch.cpu(), mask2=data_random_batch["linker_mask"].squeeze().cpu())
 
                 for r_dist in V_random_distance_batch:
                     distances_random_samples.append(r_dist.item())
                 
                 for r_cos in V_random_cosine_similarity:
                     cosine_similarities_random_samples.append(r_cos)
-                
 
+                for r_haus in V_random_hausdorff_batch:
+                    hausdorff_distances_random_samples.append(r_haus)
                 
                 
                 marginal_contrib_distance += (V_j_plus_distance - V_j_minus_distance)
 
                 marginal_contrib_cosine_similarity += (V_j_plus_cosine_similarity - V_j_minus_cosine_similarity)
 
+                marginal_contrib_hausdorff += (V_j_plus_hausdorff - V_j_minus_hausdorff)
+
                 # end_time = time.time()
                 # print("Time to compute V_j_plus, V_j_minus, V_random, and the marginal contribution in seconds:", end_time - start_time)
                 
 
-            phi_atoms[fragment_indices[j].item()] = [0,0] #,0]    
+            phi_atoms[fragment_indices[j].item()] = [0,0,0]    
             phi_atoms[fragment_indices[j].item()][0] = marginal_contrib_distance/M #j is the index of the fragment atom in the fragment indices tensor
             phi_atoms[fragment_indices[j].item()][1] = marginal_contrib_cosine_similarity/M
-            # phi_atoms[fragment_indices[j]][2] = marginal_contrib_hausdorff/M
+            phi_atoms[fragment_indices[j].item()][2] = marginal_contrib_hausdorff/M
 
         print(data["name"])
 
         phi_atoms_distances = {}
         phi_atoms_cosine_similarity = {}
+        phi_atoms_hausdorff = {}
         for atom_index, phi_values in phi_atoms.items():
             phi_atoms_distances[atom_index] = phi_values[0]
             phi_atoms_cosine_similarity[atom_index] = phi_values[1]
+            phi_atoms_hausdorff[atom_index] = phi_values[2]
+
         
         # Save phi_atoms to a text file
         with open(f'{folder_save_path}/phi_atoms_{data_index}.txt', 'w') as write_file:
             write_file.write("sample name: " + str(data["name"]) + "\n")
-            write_file.write("atom_index,distance,cosine_similarity\n")
+            write_file.write("atom_index,distance,cosine_similarity,hausdorff\n")
             for atom_index, phi_values in phi_atoms.items():
-                write_file.write(f"{atom_index},{phi_values[0]},{phi_values[1]}\n")
+                write_file.write(f"{atom_index},{phi_values[0]},{phi_values[1]}, {phi_values[2]}\n")
 
             write_file.write("\n")
             # save sum of phi values for disance and cosine similarity
             write_file.write("Sum of phi values for distance\n")
             write_file.write(str(sum([p_values[0] for p_values in phi_atoms.values()])) + "\n")
             write_file.write("Sum of phi values for cosine similarity\n")
-            write_file.write(str(sum([p_values[1] for p_values in phi_atoms.values()])) + "\n")     
+            write_file.write(str(sum([p_values[1] for p_values in phi_atoms.values()])) + "\n")
+            write_file.write("Sum of phi values for hausdorff\n")
+            write_file.write(str(sum([p_values[2] for p_values in phi_atoms.values()])) + "\n")     
             write_file.write("Average distance random samples:\n")
             write_file.write(str(sum(distances_random_samples)/len(distances_random_samples)) + "\n")
             write_file.write("Average cosine similarity random samples:\n")
-            write_file.write(str(sum(cosine_similarities_random_samples)/len(cosine_similarities_random_samples)) + "\n")      
+            write_file.write(str(sum(cosine_similarities_random_samples)/len(cosine_similarities_random_samples)) + "\n")
+            write_file.write("Average hausdorff distance random samples:\n")
+            write_file.write(str(sum(hausdorff_distances_random_samples)/len(hausdorff_distances_random_samples)) + "\n")      
             write_file.write("Distances random samples\n")
             write_file.write(str(distances_random_samples) + "\n")
             write_file.write("Cosines similarity random samples\n")
             write_file.write(str(cosine_similarities_random_samples) + "\n")
+            write_file.write("Hausdorff distances random samples\n")
+            write_file.write(str(hausdorff_distances_random_samples) + "\n")
 
         if SAVE_VISUALIZATION:
+            phi_values_for_viz = phi_atoms_hausdorff
             for i in range(len(data['positions'])):
                 chain = chain_batch[:, i, :, :]
                 assert chain.shape[0] == args.keep_frames
@@ -1567,7 +1367,7 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
                     bg='white',
                     is_geom=model.is_geom,
                     fragment_mask=data['fragment_mask'][i].squeeze(),
-                    phi_values=phi_atoms_distances
+                    phi_values=phi_values_for_viz
                 )
 
                 # Saving final prediction and ground truth separately
@@ -1596,108 +1396,4 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
                 )
 
             start += len(data['positions'])
-
-
-# ## Checking Shapley value Propeties
-
-# In[ ]:
-
-
-# shapley_values = {0:(-0.18252010345458985,-0.03153111279010773),
-# 1:(-0.19735857963562012,-0.0004155013896524906),
-# 2:(0.24352870702743531,0.03291264953091741),
-# 3:(0.5766246366500855,-0.02155731648206711),
-# 4:(-0.8824016571044921,-0.02419700352475047),
-# 5:(0.04895777225494385,-0.02288945931941271),
-# 6:(-0.11883691549301148,-0.017148097790777684),
-# 7:(-0.3973711347579956,-0.08772553377784789),
-# 8:(-1.0809556245803833,0.005452861245721578),
-# 9:(-0.09876126766204835,-0.04913015581667423),
-# 10:(-0.9884893560409546,0.11794438790529967),
-# 11:(-1.126043050289154,0.13286019276827574),
-# 12:(-1.1925089359283447,-0.07200432924553751),
-# 13:(-1.183656153678894,0.11058532498776913),
-# 14:(-1.2386692070960998,0.12144924929365515),
-# 15:(-0.9519470238685608,0.09354953311383724),
-# 16:(-1.0259105682373046,0.1189951341226697),
-# 17:(-0.47114646434783936,-0.006474981680512428),
-# 18:(-0.516231164932251,0.08100643368437886),
-# 19:(-1.2924485397338867,0.13028908021748065)}
-
-
-# In[ ]:
-
-
-# sum_shapley_values_distance = 0
-# sum_shapley_values_cosine_similarity = 0
-
-# for key, value in shapley_values.items():
-#     sum_shapley_values_distance += value[0]
-#     sum_shapley_values_cosine_similarity += value[1]
-
-# print("Sum of shapley values for distance", sum_shapley_values_distance)
-# print("Sum of shapley values for cosine similarity", sum_shapley_values_cosine_similarity)
-
-
-# In[ ]:
-
-
-
-# # Convert the list to a numpy array
-# distances_array = np.array(distances_random_graphs)
-
-# # Calculate the z-scores for each element in the array
-# z_scores = (distances_array - np.mean(distances_array)) / np.std(distances_array)
-
-# # Define a threshold for outliers (e.g., z-score > 3)
-# threshold = 0.5
-
-# # Create a mask to identify outliers
-# outlier_mask = np.abs(z_scores) > threshold
-
-# # Remove outliers from the array
-# filtered_distances = distances_array[~outlier_mask]
-
-# # Convert the filtered array back to a list
-# filtered_distances_list = filtered_distances.tolist()
-
-
-# In[ ]:
-
-
-# sum(filtered_distances_list) / len(filtered_distances_list)
-
-
-# In[ ]:
-
-
-# filtered_distances_list
-
-
-# In[ ]:
-
-
-# # Convert the list to a numpy array
-# cos_sim_array = np.array(cosine_similarities_random_graphs)
-
-# # Calculate the z-scores for each element in the array
-# z_scores = (cos_sim_array - np.mean(cos_sim_array)) / np.std(cos_sim_array)
-
-# # Define a threshold for outliers (e.g., z-score > 3)
-# threshold = 0.5
-
-# # Create a mask to identify outliers
-# outlier_mask = np.abs(z_scores) > threshold
-
-# # Remove outliers from the array
-# filtered_cos_sim = cos_sim_array[~outlier_mask]
-
-# # Convert the filtered array back to a list
-# filtered_cos_sim_list = filtered_cos_sim.tolist()
-
-
-# In[ ]:
-
-
-# sum(filtered_cos_sim_list) / len(filtered_cos_sim_list)
 

@@ -1343,6 +1343,8 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
 
         if SAVE_VISUALIZATION:
             phi_values_for_viz = phi_atoms_hausdorff
+
+            # Saving chains and final states
             for i in range(len(data['positions'])):
                 chain = chain_batch[:, i, :, :]
                 assert chain.shape[0] == args.keep_frames
@@ -1353,8 +1355,35 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
                 name = str(i + start)
                 chain_output = os.path.join(chains_output_dir, name)
                 os.makedirs(chain_output, exist_ok=True)
+                
+                #save initial random distrubution with noise
+                positions_combined = torch.zeros_like(data['positions'])
+                one_hot_combined = torch.zeros_like(data['one_hot'])
 
-                one_hot = chain[:, :, 3:-1]
+                # Iterate over each atom and decide whether to use original or noisy data
+                for atom_idx in range(data['positions'].shape[1]):
+                    if data['fragment_mask'][0, atom_idx] == 1:
+                        # Use original positions and features for fragment atoms
+                        positions_combined[:, atom_idx, :] = data['positions'][:, atom_idx, :]
+                        one_hot_combined[:, atom_idx, :] = data['one_hot'][:, atom_idx, :]
+                        # atom_mask_combined[:, atom_idx] = data['atom_mask'][:, atom_idx]
+                    else:
+                        # Use noisy positions and features for linker atoms
+                        positions_combined[:, atom_idx, :] = noisy_positions_present_atoms[:, atom_idx, :]
+                        one_hot_combined[:, atom_idx, :] = noisy_features_present_atoms[:, atom_idx, :]
+
+                #save initial distribution TODO: fix positions, they are not centered
+                save_xyz_file(
+                    chain_output,
+                    one_hot_combined,
+                    positions_combined,
+                    node_mask[i].unsqueeze(0),
+                    names=[f'{name}_' + str(args.keep_frames)],
+                    is_geom=model.is_geom
+                )
+
+                # one_hot = chain[:, :, 3:-1]
+                one_hot = chain[:, :, 3:] #@mastro, added last atom type (not sure whyt it was not included...) However, TODO check again
                 positions = chain[:, :, :3]
                 chain_node_mask = torch.cat([node_mask[i].unsqueeze(0) for _ in range(args.keep_frames)], dim=0)
                 names = [f'{name}_{j}' for j in range(args.keep_frames)]
@@ -1396,4 +1425,75 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
                 )
 
             start += len(data['positions'])
+
+
+# ### Save initial distrubiution without re-explaining (loading Shapley values from file)
+
+# In[ ]:
+
+
+# phi_values_for_viz = phi_atoms_hausdorff
+
+# # Saving chains and final states
+# for i in range(len(data['positions'])):
+#     chains_output_dir = os.path.join(args.chains, experiment_name, args.prefix, 'chains_' + args.P + '_seed_42_without_initial_distr')
+#     final_states_output_dir = os.path.join(args.chains, experiment_name, args.prefix, 'final_states_0.5_seed_42_without_initial_distr')
+
+#     # Saving chains
+#     name = str(i + start)
+#     chain_output = os.path.join(chains_output_dir, name)
+#     # os.makedirs(chain_output, exist_ok=True)
+    
+#     #save initial random distrubution with noise
+#     save_xyz_file(
+#         chain_output,
+#         noisy_features_present_atoms.unsqueeze(0),
+#         noisy_positions_present_atoms.unsqueeze(0),
+#         [1]*noisy_positions_present_atoms.shape[1],
+#         names=[f'{name}_{j}' + str(args.keep_frames)],
+#         is_geom=model.is_geom
+#     )
+
+    
+#     one_hot = chain[:, :, 3:-1]
+#     positions = chain[:, :, :3]
+#     chain_node_mask = torch.cat([node_mask[i].unsqueeze(0) for _ in range(args.keep_frames)], dim=0)
+#     names = [f'{name}_{j}' for j in range(args.keep_frames)]
+
+#     visualize_chain_xai(
+#         chain_output,
+#         spheres_3d=False,
+#         alpha=0.7,
+#         bg='white',
+#         is_geom=model.is_geom,
+#         fragment_mask=data['fragment_mask'][i].squeeze(),
+#         phi_values=phi_values_for_viz
+#     )
+
+#     # Saving final prediction and ground truth separately
+#     true_one_hot = data['one_hot'][i].unsqueeze(0)
+#     true_positions = data['positions'][i].unsqueeze(0)
+#     true_node_mask = data['atom_mask'][i].unsqueeze(0)
+#     save_xyz_file(
+#         final_states_output_dir,
+#         true_one_hot,
+#         true_positions,
+#         true_node_mask,
+#         names=[f'{name}_true'],
+#         is_geom=model.is_geom,
+#     )
+
+#     pred_one_hot = chain[0, :, 3:-1].unsqueeze(0)
+#     pred_positions = chain[0, :, :3].unsqueeze(0)
+#     pred_node_mask = chain_node_mask[0].unsqueeze(0)
+#     save_xyz_file(
+#         final_states_output_dir,
+#         pred_one_hot,
+#         pred_positions,
+#         pred_node_mask,
+#         names=[f'{name}_pred'],
+#         is_geom=model.is_geom
+#     )
+
+# start += len(data['positions'])
 

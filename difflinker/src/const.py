@@ -1,8 +1,13 @@
 import torch
-
+import yaml
 from rdkit import Chem
 
-RUNNING_DEVICE = 'cuda:4' if torch.cuda.is_available() else 'cpu'
+
+# Load configuration from config.yml
+with open('config.yml', 'r') as file:
+    config = yaml.safe_load(file)
+    
+RUNNING_DEVICE = config["DEVICE"] if torch.cuda.is_available() else 'cpu'
 
 TORCH_FLOAT = torch.float32
 TORCH_INT = torch.int8

@@ -35,47 +35,62 @@ import imageio
 from src import const
 import networkx as nx
 import time 
-import yaml
+
 from pysmiles import read_smiles
 #get running device from const file
+running_device = const.RUNNING_DEVICE
 
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 # Simulate command-line arguments
 
-# density = sys.argv[sys.argv.index("--P") + 1]
-with open('config.yml', 'r') as file:
-    config = yaml.safe_load(file)
+density = sys.argv[sys.argv.index("--P") + 1]
+seed = sys.argv[sys.argv.index("--seed") + 1]
+# SEED = 42
+# density = "0.5"
+sys.argv = [
+    'ipykernel_launcher.py',
+    '--checkpoint', 'models/zinc_difflinker.ckpt',
+    '--chains', 'trajectories',
+    '--data', 'datasets',
+    '--prefix', 'zinc_final_test',
+    '--keep_frames', '10',
+    #'--device', 'cuda:0' #not used, it is set in the code
+    '--P', density,
+    '--seed', seed #1240 #14085
+]
 
-checkpoint = config['CHECKPOINT']
-chains = config['CHAINS']
-DATA = config['DATA']
-prefix = config['PREFIX']
-keep_frames = int(config['KEEP_FRAMES'])
-P = config['P']
-device = config['DEVICE'] if torch.cuda.is_available() else 'cpu'
-SEED = int(config['SEED'])
 
-
+parser = argparse.ArgumentParser()
+parser.add_argument('--checkpoint', action='store', type=str, required=True)
+parser.add_argument('--chains', action='store', type=str, required=True)
+parser.add_argument('--prefix', action='store', type=str, required=True)
+parser.add_argument('--data', action='store', type=str, required=False, default=None)
+parser.add_argument('--keep_frames', action='store', type=int, required=True)
+# parser.add_argument('--device', action='store', type=str, required=True) #not used, it is set in the code
+parser.add_argument('--P', action='store', type=str, required=True)
+parser.add_argument('--seed', action='store', type=int, required=True)
+args = parser.parse_args()
+SEED = args.seed
 print("seed is: ", SEED)
-
-experiment_name = checkpoint.split('/')[-1].replace('.ckpt', '')
-chains_output_dir = os.path.join(chains, experiment_name, prefix, 'chains_' + P + '_seed_' + str(SEED))
-final_states_output_dir = os.path.join(chains, experiment_name, prefix, 'final_states_' + P + '_seed_' + str(SEED))
+args.device = running_device #@mastro
+experiment_name = args.checkpoint.split('/')[-1].replace('.ckpt', '')
+chains_output_dir = os.path.join(args.chains, experiment_name, args.prefix, 'chains_' + args.P + '_seed_' + str(SEED))
+final_states_output_dir = os.path.join(args.chains, experiment_name, args.prefix, 'final_states_' + args.P + '_seed_' + str(SEED))
 os.makedirs(chains_output_dir, exist_ok=True)
 os.makedirs(final_states_output_dir, exist_ok=True)
 
 # Loading model form checkpoint (all hparams will be automatically set)
-model = DDPM.load_from_checkpoint(checkpoint, map_location=device)
+model = DDPM.load_from_checkpoint(args.checkpoint, map_location=args.device)
 
 # Possibility to evaluate on different datasets (e.g., on CASF instead of ZINC)
-model.val_data_prefix = prefix
+model.val_data_prefix = args.prefix
 
-print(f"Running device: {device}")
+print(f"Running device: {args.device}")
 # In case <Anonymous> will run my model or vice versa
-if DATA is not None:
-    model.data_path = DATA
+if args.data is not None:
+    model.data_path = args.data
 
-model = model.eval().to(device)
+model = model.eval().to(args.device)
 model.setup(stage='val')
 dataloader = get_dataloader(
     model.val_dataset,
@@ -85,7 +100,7 @@ dataloader = get_dataloader(
 
 
 
-# In[ ]:
+# In[3]:
 
 
 torch.manual_seed(SEED)
@@ -575,7 +590,7 @@ def visualize_chain_xai(
 
 # ##### Multiple sampling steps at a time
 
-# In[ ]:
+# In[6]:
 
 
 #@mastro
@@ -588,11 +603,11 @@ start = 0
 
 SAVE_VISUALIZATION = True
 chain_with_full_fragments = None
-M = config["M"] #100 #number of Monte Carlo Sampling steps
-# P = None #probability of atom to exist in random graph (also edge in the future)
+M = 100 #100 #number of Monte Carlo Sampling steps
+P = None #probability of atom to exist in random graph (also edge in the future)
 PARALLEL_STEPS = 100
 # Create the folder if it does not exist
-folder_save_path = "results/explanations_" + P + "_seed_" + str(SEED)
+folder_save_path = "results/explanations_" + args.P + "_seed_" + str(SEED)
 if not os.path.exists(folder_save_path):
     os.makedirs(folder_save_path)
 
@@ -611,67 +626,54 @@ max_num_atoms = max(data["positions"].shape[1] for data in data_list)
 #     num_atoms_to_stack = max_num_atoms - data["positions"].shape[1]
     
 #     # Pad positions
-#     padding = torch.zeros(data["positions"].shape[0], num_atoms_to_stack, data["positions"].shape[2]).to(device)
+#     padding = torch.zeros(data["positions"].shape[0], num_atoms_to_stack, data["positions"].shape[2]).to(args.device)
 #     data_list[i]["positions"] = torch.cat((data["positions"], padding), dim=1)
     
 #     # Pad one_hot
-#     padding = torch.zeros(data["one_hot"].shape[0], num_atoms_to_stack, data["one_hot"].shape[2]).to(device)
+#     padding = torch.zeros(data["one_hot"].shape[0], num_atoms_to_stack, data["one_hot"].shape[2]).to(args.device)
 #     data_list[i]["one_hot"] = torch.cat((data["one_hot"], padding), dim=1)
     
 #     # Pad charges
-#     padding = torch.zeros(data["charges"].shape[0], num_atoms_to_stack, data["charges"].shape[2]).to(device)
+#     padding = torch.zeros(data["charges"].shape[0], num_atoms_to_stack, data["charges"].shape[2]).to(args.device)
 #     data_list[i]["charges"] = torch.cat((data["charges"], padding), dim=1)
     
 #     # Pad anchors
-#     padding = torch.zeros(data["anchors"].shape[0], num_atoms_to_stack, data["anchors"].shape[2]).to(device)
+#     padding = torch.zeros(data["anchors"].shape[0], num_atoms_to_stack, data["anchors"].shape[2]).to(args.device)
 #     data_list[i]["anchors"] = torch.cat((data["anchors"], padding), dim=1)
     
 #     # Pad fragment_mask
-#     padding = torch.zeros(data["fragment_mask"].shape[0], num_atoms_to_stack, data["fragment_mask"].shape[2]).to(device)
+#     padding = torch.zeros(data["fragment_mask"].shape[0], num_atoms_to_stack, data["fragment_mask"].shape[2]).to(args.device)
 #     data_list[i]["fragment_mask"] = torch.cat((data["fragment_mask"], padding), dim=1)
     
 #     # Pad linker_mask
-#     padding = torch.zeros(data["linker_mask"].shape[0], num_atoms_to_stack, data["linker_mask"].shape[2]).to(device)
+#     padding = torch.zeros(data["linker_mask"].shape[0], num_atoms_to_stack, data["linker_mask"].shape[2]).to(args.device)
 #     data_list[i]["linker_mask"] = torch.cat((data["linker_mask"], padding), dim=1)
     
 #     # Pad atom_mask
-#     padding = torch.zeros(data["atom_mask"].shape[0], num_atoms_to_stack, data["atom_mask"].shape[2]).to(device)
+#     padding = torch.zeros(data["atom_mask"].shape[0], num_atoms_to_stack, data["atom_mask"].shape[2]).to(args.device)
 #     data_list[i]["atom_mask"] = torch.cat((data["atom_mask"], padding), dim=1)
 
 #define initial random noise for positions and features #shape = [1, max_num_atoms, 3] for positions and [1, max_num_atoms, 8] for features. 1 since batch size is 1 for our explaination task
 pos_size = (data_list[0]["positions"].shape[0], max_num_atoms, data_list[0]["positions"].shape[2])
 feature_size = (data_list[0]["one_hot"].shape[0], max_num_atoms, data_list[0]["one_hot"].shape[2])
 
-INTIAL_DISTIBUTION_PATH = "results/explanations_" + P + "_seed_" + str(SEED)
-noisy_features = None
-noisy_positions = None
-#check if the initial distribution of the noisy features and positions already exists, if not create it
-if os.path.exists(INTIAL_DISTIBUTION_PATH + "/noisy_features_seed_" + str(SEED) + ".pt"):
-    # load initial distrubution of noisy features and positions
-    noisy_features = torch.load(INTIAL_DISTIBUTION_PATH + "/noisy_features_seed_" + str(SEED) + ".pt", map_location=device, weights_only=True)
-    noisy_positions = torch.load(INTIAL_DISTIBUTION_PATH + "/noisy_positions_seed_" + str(SEED) + ".pt", map_location=device, weights_only=True)
+noisy_positions = torch.randn(pos_size, device=args.device)
+noisy_features = torch.randn(feature_size, device=args.device)
 
-else:
-    noisy_positions = torch.randn(pos_size, device=device)
-    noisy_features = torch.randn(feature_size, device=device)
+# print("Noisy positions size:", pos_size)
+# print("Noisy features size:", feature_size)
+# print("Noisy positions:", noisy_positions)
+# print("Noisy features:", noisy_features)
 
-    # print("Noisy positions size:", pos_size)
-    # print("Noisy features size:", feature_size)
-    # print("Noisy positions:", noisy_positions)
-    # print("Noisy features:", noisy_features)
+#save the noisy positions and features on file .txt
+noisy_positions_file = os.path.join(folder_save_path, "noisy_positions_seed_" + str(SEED) + ".txt")
+noisy_features_file = os.path.join(folder_save_path, "noisy_features_seed_" + str(SEED) + ".txt")
 
-    #save the noisy positions and features on file .txt
-    noisy_positions_file = os.path.join(folder_save_path, "noisy_positions_seed_" + str(SEED) + ".txt")
-    noisy_features_file = os.path.join(folder_save_path, "noisy_features_seed_" + str(SEED) + ".txt")
+with open(noisy_positions_file, "w") as f:
+    f.write(str(noisy_positions))
 
-    with open(noisy_positions_file, "w") as f:
-        f.write(str(noisy_positions))
-
-    with open(noisy_features_file, "w") as f:
-        f.write(str(noisy_features))
-
-    torch.save(noisy_positions, os.path.join(folder_save_path, "noisy_positions_seed_" + str(SEED) + ".pt"))
-    torch.save(noisy_features, os.path.join(folder_save_path, "noisy_features_seed_" + str(SEED) + ".pt"))
+with open(noisy_features_file, "w") as f:
+    f.write(str(noisy_features))
 
 for data_index, data in enumerate(tqdm(data_list)): #7:
 
@@ -695,11 +697,11 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
         
         edge_node_ratio = num_edges/num_nodes
         
-        if P == "graph_density":
+        if args.P == "graph_density":
             P = graph_density #probability of atom to exist in random graph (not sure if correct approach, this was correct for edges)
-        elif P == "node_density":
+        elif args.P == "node_density":
             P = node_density
-        elif P == "node_edge_ratio" or P == "edge_node_ratio":
+        elif args.P == "node_edge_ratio" or args.P == "edge_node_ratio":
             if node_edge_ratio < edge_node_ratio:
                 P = node_edge_ratio
                 print("Using node-edge ratio", node_edge_ratio)
@@ -708,12 +710,12 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
                 print("Using edge-node ratio", edge_node_ratio)            
         else:
             try:
-                P = float(P)
+                P = float(args.P)
             except ValueError:
                 raise ValueError("P must be either 'graph_density', 'node_density', 'node_edge_ratio', 'edge_node_ratio' or a float value.")
         
 
-        print("Using P:", P, P)
+        print("Using P:", args.P, P)
 
         chain_with_full_fragments = None
        
@@ -732,7 +734,7 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
 
         # print("Filtered noisy positions:", noisy_positions_present_atoms)
         # print("Filtered noisy features:", noisy_positions_present_atoms)
-        chain_batch, node_mask = model.sample_chain(data, keep_frames=keep_frames, noisy_positions=noisy_positions_present_atoms, noisy_features=noisy_features_present_atoms)
+        chain_batch, node_mask = model.sample_chain(data, keep_frames=args.keep_frames, noisy_positions=noisy_positions_present_atoms, noisy_features=noisy_features_present_atoms)
         
         #get the generated molecule and store it in a variable
         chain_with_full_fragments = chain_batch[0, :, :, :] #need to get only the final frame, is 0 ok in the first dimension?
@@ -791,7 +793,7 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
 
                 fragment_indices = torch.where(data["fragment_mask"] == 1)[1]
                 num_fragment_atoms = len(fragment_indices)
-                fragment_indices = fragment_indices.repeat(PARALLEL_STEPS).to(device)
+                fragment_indices = fragment_indices.repeat(PARALLEL_STEPS).to(args.device)
 
                 data_j_plus = data.copy()
                 data_j_minus = data.copy()
@@ -818,12 +820,12 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
                        
                     
 
-                N_z_mask=N_z_mask.flatten().to(device)
+                N_z_mask=N_z_mask.flatten().to(args.device)
                 
                 
                 # print("N_z_mask for sample", sampled, step, N_z_mask)
 
-                N_mask = torch.ones(PARALLEL_STEPS * num_fragment_atoms, dtype=torch.int32, device=device)
+                N_mask = torch.ones(PARALLEL_STEPS * num_fragment_atoms, dtype=torch.int32, device=args.device)
 
                 # end_time = time.time()
 
@@ -833,23 +835,23 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
 
                 pi = torch.cat([torch.randperm(num_fragment_atoms, generator=rng_torch) for _ in range(PARALLEL_STEPS)], dim=0)
 
-                N_j_plus_index = torch.ones(PARALLEL_STEPS*num_fragment_atoms, dtype=torch.int, device=device)
-                N_j_minus_index = torch.ones(PARALLEL_STEPS*num_fragment_atoms, dtype=torch.int, device=device)
+                N_j_plus_index = torch.ones(PARALLEL_STEPS*num_fragment_atoms, dtype=torch.int, device=args.device)
+                N_j_minus_index = torch.ones(PARALLEL_STEPS*num_fragment_atoms, dtype=torch.int, device=args.device)
 
                 selected_node_index = np.where(pi == j)
-                selected_node_index = torch.tensor(np.array(selected_node_index), device=device).squeeze()
+                selected_node_index = torch.tensor(np.array(selected_node_index), device=args.device).squeeze()
                 selected_node_index = selected_node_index.repeat_interleave(num_fragment_atoms) #@mastro TO BE CHECKED IF THIS IS CORRECT
                 # print("Selected node index", selected_node_index)
-                k_values = torch.arange(num_fragment_atoms*PARALLEL_STEPS, device=device)
+                k_values = torch.arange(num_fragment_atoms*PARALLEL_STEPS, device=args.device)
 
                 add_to_pi = torch.arange(start=0, end=PARALLEL_STEPS*num_fragment_atoms, step=num_fragment_atoms).repeat_interleave(num_fragment_atoms) #check if it is correct ot consider num_fragment_atoms and not num_atoms
 
                 pi_add = pi + add_to_pi
-                pi_add = pi_add.to(device=device)
+                pi_add = pi_add.to(device=args.device)
                 #this must be cafeully checked. this should be adapted for nodes
                 add_to_node_index = torch.arange(start=0, end=PARALLEL_STEPS*num_atoms, step=num_atoms) #@mastro change step from num_fragment_atoms to num_atoms
                 
-                add_to_node_index = add_to_node_index.repeat_interleave(num_fragment_atoms).to(device) #changed from num_atoms to num_fragment_atoms
+                add_to_node_index = add_to_node_index.repeat_interleave(num_fragment_atoms).to(args.device) #changed from num_atoms to num_fragment_atoms
 
                 
                 N_j_plus_index[pi_add] = torch.where(k_values <= selected_node_index, N_mask[pi_add], N_z_mask[pi_add])
@@ -859,7 +861,7 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
                 fragment_indices = fragment_indices + add_to_node_index
                 
                 
-                N_j_plus = fragment_indices[(N_j_plus_index==1)] #fragment to keep in molecule j plus
+                N_j_plus = fragment_indices[(N_j_plus_index==1)] #fragement to keep in molecule j plus
                 #fragement indices to keep in molecule j minus
                
                 N_j_minus = fragment_indices[(N_j_minus_index==1)] #it is ok. it contains fragmens indices to keep in molecule j minus (indices that index the atom nodes)
@@ -1011,139 +1013,139 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
                     for i in range(PARALLEL_STEPS):
                         #for j plus positions
                         num_atoms_to_stack = max_atoms_j_plus - data_j_plus_dict[i]["positions"].shape[1]
-                        padding = torch.zeros(data_j_plus_dict[i]["positions"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["positions"].shape[2]).to(device)
+                        padding = torch.zeros(data_j_plus_dict[i]["positions"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["positions"].shape[2]).to(args.device)
                         stacked_positions = torch.cat((data_j_plus_dict[i]["positions"], padding), dim=1)
                         data_j_plus_dict[i]["positions"] = stacked_positions
                         #for j plus one_hot
-                        padding = torch.zeros(data_j_plus_dict[i]["one_hot"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["one_hot"].shape[2]).to(device)
+                        padding = torch.zeros(data_j_plus_dict[i]["one_hot"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["one_hot"].shape[2]).to(args.device)
                         stacked_one_hot = torch.cat((data_j_plus_dict[i]["one_hot"], padding), dim=1)
                         data_j_plus_dict[i]["one_hot"] = stacked_one_hot
-                        padding = torch.zeros(data_j_plus_dict[i]["fragment_mask"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["fragment_mask"].shape[2]).to(device)
+                        padding = torch.zeros(data_j_plus_dict[i]["fragment_mask"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["fragment_mask"].shape[2]).to(args.device)
                         stacked_fragment_mask = torch.cat((data_j_plus_dict[i]["fragment_mask"], padding), dim=1)
                         data_j_plus_dict[i]["fragment_mask"] = stacked_fragment_mask
-                        padding = torch.zeros(data_j_plus_dict[i]["charges"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["charges"].shape[2]).to(device)
+                        padding = torch.zeros(data_j_plus_dict[i]["charges"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["charges"].shape[2]).to(args.device)
                         stacked_charges = torch.cat((data_j_plus_dict[i]["charges"], padding), dim=1)
                         data_j_plus_dict[i]["charges"] = stacked_charges
-                        padding = torch.zeros(data_j_plus_dict[i]["anchors"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["anchors"].shape[2]).to(device)
+                        padding = torch.zeros(data_j_plus_dict[i]["anchors"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["anchors"].shape[2]).to(args.device)
                         stacked_anchors = torch.cat((data_j_plus_dict[i]["anchors"], padding), dim=1)
                         data_j_plus_dict[i]["anchors"] = stacked_anchors
-                        padding = torch.zeros(data_j_plus_dict[i]["linker_mask"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["linker_mask"].shape[2]).to(device)
+                        padding = torch.zeros(data_j_plus_dict[i]["linker_mask"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["linker_mask"].shape[2]).to(args.device)
                         stacked_linker_mask = torch.cat((data_j_plus_dict[i]["linker_mask"], padding), dim=1)
                         data_j_plus_dict[i]["linker_mask"] = stacked_linker_mask
-                        padding = torch.zeros(data_j_plus_dict[i]["atom_mask"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["atom_mask"].shape[2]).to(device)
+                        padding = torch.zeros(data_j_plus_dict[i]["atom_mask"].shape[0], num_atoms_to_stack, data_j_plus_dict[i]["atom_mask"].shape[2]).to(args.device)
                         stacked_atom_mask = torch.cat((data_j_plus_dict[i]["atom_mask"], padding), dim=1)
                         data_j_plus_dict[i]["atom_mask"] = stacked_atom_mask
                         num_edges_to_stack = max_edges_j_plus - data_j_plus_dict[i]["edge_mask"].shape[0]
                         data_j_plus_dict[i]["edge_mask"] = data_j_plus_dict[i]["edge_mask"].unsqueeze(0)
-                        padding = torch.zeros(data_j_plus_dict[i]["edge_mask"].shape[0], num_edges_to_stack, data_j_plus_dict[i]["edge_mask"].shape[2]).to(device)
+                        padding = torch.zeros(data_j_plus_dict[i]["edge_mask"].shape[0], num_edges_to_stack, data_j_plus_dict[i]["edge_mask"].shape[2]).to(args.device)
                         stacked_edge_mask = torch.cat((data_j_plus_dict[i]["edge_mask"], padding), dim=1)
                         data_j_plus_dict[i]["edge_mask"] = stacked_edge_mask
                         
                         #for noisy positions and features for j plus
                         noisy_positions_j_plus_dict[i] = noisy_positions_j_plus_dict[i] #check this
-                        padding = torch.zeros(noisy_positions_j_plus_dict[i].shape[0], num_atoms_to_stack, noisy_positions_j_plus_dict[i].shape[2]).to(device)
+                        padding = torch.zeros(noisy_positions_j_plus_dict[i].shape[0], num_atoms_to_stack, noisy_positions_j_plus_dict[i].shape[2]).to(args.device)
                         stacked_positions = torch.cat((noisy_positions_j_plus_dict[i], padding), dim=1)
                         noisy_positions_j_plus_dict[i] = stacked_positions
 
                         noisy_features_j_plus_dict[i] = noisy_features_j_plus_dict[i]
-                        padding = torch.zeros(noisy_features_j_plus_dict[i].shape[0], num_atoms_to_stack, noisy_features_j_plus_dict[i].shape[2]).to(device)
+                        padding = torch.zeros(noisy_features_j_plus_dict[i].shape[0], num_atoms_to_stack, noisy_features_j_plus_dict[i].shape[2]).to(args.device)
                         stacked_features = torch.cat((noisy_features_j_plus_dict[i], padding), dim=1)
                         noisy_features_j_plus_dict[i] = stacked_features
 
                         #for j minus
                         num_atoms_to_stack = max_atoms_j_minus - data_j_minus_dict[i]["positions"].shape[1]
-                        padding = torch.zeros(data_j_minus_dict[i]["positions"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["positions"].shape[2]).to(device) #why does this work?
+                        padding = torch.zeros(data_j_minus_dict[i]["positions"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["positions"].shape[2]).to(args.device) #why does this work?
                         stacked_positions = torch.cat((data_j_minus_dict[i]["positions"], padding), dim=1)
                         data_j_minus_dict[i]["positions"] = stacked_positions
                         
-                        padding = torch.zeros(data_j_minus_dict[i]["one_hot"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["one_hot"].shape[2]).to(device)
+                        padding = torch.zeros(data_j_minus_dict[i]["one_hot"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["one_hot"].shape[2]).to(args.device)
                         stacked_one_hot = torch.cat((data_j_minus_dict[i]["one_hot"], padding), dim=1)
                         data_j_minus_dict[i]["one_hot"] = stacked_one_hot
                         
-                        padding = torch.zeros(data_j_minus_dict[i]["fragment_mask"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["fragment_mask"].shape[2]).to(device)
+                        padding = torch.zeros(data_j_minus_dict[i]["fragment_mask"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["fragment_mask"].shape[2]).to(args.device)
                         stacked_fragment_mask = torch.cat((data_j_minus_dict[i]["fragment_mask"], padding), dim=1)
                         data_j_minus_dict[i]["fragment_mask"] = stacked_fragment_mask
 
                         
-                        padding = torch.zeros(data_j_minus_dict[i]["charges"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["charges"].shape[2]).to(device)
+                        padding = torch.zeros(data_j_minus_dict[i]["charges"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["charges"].shape[2]).to(args.device)
                         stacked_charges = torch.cat((data_j_minus_dict[i]["charges"], padding), dim=1)
                         data_j_minus_dict[i]["charges"] = stacked_charges
                         
-                        padding = torch.zeros(data_j_minus_dict[i]["anchors"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["anchors"].shape[2]).to(device)
+                        padding = torch.zeros(data_j_minus_dict[i]["anchors"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["anchors"].shape[2]).to(args.device)
                         stacked_anchors = torch.cat((data_j_minus_dict[i]["anchors"], padding), dim=1)
                         data_j_minus_dict[i]["anchors"] = stacked_anchors
                        
-                        padding = torch.zeros(data_j_minus_dict[i]["linker_mask"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["linker_mask"].shape[2]).to(device)
+                        padding = torch.zeros(data_j_minus_dict[i]["linker_mask"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["linker_mask"].shape[2]).to(args.device)
                         stacked_linker_mask = torch.cat((data_j_minus_dict[i]["linker_mask"], padding), dim=1)
                         data_j_minus_dict[i]["linker_mask"] = stacked_linker_mask
                         
-                        padding = torch.zeros(data_j_minus_dict[i]["atom_mask"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["atom_mask"].shape[2]).to(device)
+                        padding = torch.zeros(data_j_minus_dict[i]["atom_mask"].shape[0], num_atoms_to_stack, data_j_minus_dict[i]["atom_mask"].shape[2]).to(args.device)
                         stacked_atom_mask = torch.cat((data_j_minus_dict[i]["atom_mask"], padding), dim=1)
                         data_j_minus_dict[i]["atom_mask"] = stacked_atom_mask
                         
                         num_edges_to_stack = max_edges_j_minus - data_j_minus_dict[i]["edge_mask"].shape[0]
                         data_j_minus_dict[i]["edge_mask"] = data_j_minus_dict[i]["edge_mask"].unsqueeze(0)
-                        padding = torch.zeros(data_j_minus_dict[i]["edge_mask"].shape[0], num_edges_to_stack, data_j_minus_dict[i]["edge_mask"].shape[2]).to(device)
+                        padding = torch.zeros(data_j_minus_dict[i]["edge_mask"].shape[0], num_edges_to_stack, data_j_minus_dict[i]["edge_mask"].shape[2]).to(args.device)
                         stacked_edge_mask = torch.cat((data_j_minus_dict[i]["edge_mask"], padding), dim=1)
                         data_j_minus_dict[i]["edge_mask"] = stacked_edge_mask
                     
                         #for noisy positions and features for j plus
                         noisy_positions_j_minus_dict[i] = noisy_positions_j_minus_dict[i] #check this
-                        padding = torch.zeros(noisy_positions_j_minus_dict[i].shape[0], num_atoms_to_stack, noisy_positions_j_minus_dict[i].shape[2]).to(device)
+                        padding = torch.zeros(noisy_positions_j_minus_dict[i].shape[0], num_atoms_to_stack, noisy_positions_j_minus_dict[i].shape[2]).to(args.device)
                         stacked_positions = torch.cat((noisy_positions_j_minus_dict[i], padding), dim=1)
                         noisy_positions_j_minus_dict[i] = stacked_positions
 
                         noisy_features_j_minus_dict[i] = noisy_features_j_minus_dict[i]
-                        padding = torch.zeros(noisy_features_j_minus_dict[i].shape[0], num_atoms_to_stack, noisy_features_j_minus_dict[i].shape[2]).to(device)
+                        padding = torch.zeros(noisy_features_j_minus_dict[i].shape[0], num_atoms_to_stack, noisy_features_j_minus_dict[i].shape[2]).to(args.device)
                         stacked_features = torch.cat((noisy_features_j_minus_dict[i], padding), dim=1)
                         noisy_features_j_minus_dict[i] = stacked_features
 
                         #for random
                         num_atoms_to_stack = max_atoms_random - data_random_dict[i]["positions"].shape[1]
-                        padding = torch.zeros(data_random_dict[i]["positions"].shape[0], num_atoms_to_stack, data_random_dict[i]["positions"].shape[2]).to(device)
+                        padding = torch.zeros(data_random_dict[i]["positions"].shape[0], num_atoms_to_stack, data_random_dict[i]["positions"].shape[2]).to(args.device)
                         stacked_positions = torch.cat((data_random_dict[i]["positions"], padding), dim=1)
                         data_random_dict[i]["positions"] = stacked_positions
                         
-                        padding = torch.zeros(data_random_dict[i]["one_hot"].shape[0], num_atoms_to_stack, data_random_dict[i]["one_hot"].shape[2]).to(device)
+                        padding = torch.zeros(data_random_dict[i]["one_hot"].shape[0], num_atoms_to_stack, data_random_dict[i]["one_hot"].shape[2]).to(args.device)
                         stacked_one_hot = torch.cat((data_random_dict[i]["one_hot"], padding), dim=1)
                         data_random_dict[i]["one_hot"] = stacked_one_hot
                         
-                        padding = torch.zeros(data_random_dict[i]["fragment_mask"].shape[0], num_atoms_to_stack, data_random_dict[i]["fragment_mask"].shape[2]).to(device)
+                        padding = torch.zeros(data_random_dict[i]["fragment_mask"].shape[0], num_atoms_to_stack, data_random_dict[i]["fragment_mask"].shape[2]).to(args.device)
                         stacked_fragment_mask = torch.cat((data_random_dict[i]["fragment_mask"], padding), dim=1)
                         data_random_dict[i]["fragment_mask"] = stacked_fragment_mask
                         
-                        padding = torch.zeros(data_random_dict[i]["linker_mask"].shape[0], num_atoms_to_stack, data_random_dict[i]["linker_mask"].shape[2]).to(device)
+                        padding = torch.zeros(data_random_dict[i]["linker_mask"].shape[0], num_atoms_to_stack, data_random_dict[i]["linker_mask"].shape[2]).to(args.device)
                         stacked_linker_mask = torch.cat((data_random_dict[i]["linker_mask"], padding), dim=1)
                         data_random_dict[i]["linker_mask"] = stacked_linker_mask
 
                        
-                        padding = torch.zeros(data_random_dict[i]["charges"].shape[0], num_atoms_to_stack, data_random_dict[i]["charges"].shape[2]).to(device)
+                        padding = torch.zeros(data_random_dict[i]["charges"].shape[0], num_atoms_to_stack, data_random_dict[i]["charges"].shape[2]).to(args.device)
                         stacked_charges = torch.cat((data_random_dict[i]["charges"], padding), dim=1)
                         data_random_dict[i]["charges"] = stacked_charges
 
                     
-                        padding = torch.zeros(data_random_dict[i]["anchors"].shape[0], num_atoms_to_stack, data_random_dict[i]["anchors"].shape[2]).to(device)
+                        padding = torch.zeros(data_random_dict[i]["anchors"].shape[0], num_atoms_to_stack, data_random_dict[i]["anchors"].shape[2]).to(args.device)
                         stacked_anchors = torch.cat((data_random_dict[i]["anchors"], padding), dim=1)
                         data_random_dict[i]["anchors"] = stacked_anchors
                        
-                        padding = torch.zeros(data_random_dict[i]["atom_mask"].shape[0], num_atoms_to_stack, data_random_dict[i]["atom_mask"].shape[2]).to(device)
+                        padding = torch.zeros(data_random_dict[i]["atom_mask"].shape[0], num_atoms_to_stack, data_random_dict[i]["atom_mask"].shape[2]).to(args.device)
                         stacked_atom_mask = torch.cat((data_random_dict[i]["atom_mask"], padding), dim=1)
                         data_random_dict[i]["atom_mask"] = stacked_atom_mask
                         
                         num_edges_to_stack = max_edges_random - data_random_dict[i]["edge_mask"].shape[0]
                         data_random_dict[i]["edge_mask"] = data_random_dict[i]["edge_mask"].unsqueeze(0)
-                        padding = torch.zeros(data_random_dict[i]["edge_mask"].shape[0], num_edges_to_stack, data_random_dict[i]["edge_mask"].shape[2]).to(device)
+                        padding = torch.zeros(data_random_dict[i]["edge_mask"].shape[0], num_edges_to_stack, data_random_dict[i]["edge_mask"].shape[2]).to(args.device)
                         stacked_edge_mask = torch.cat((data_random_dict[i]["edge_mask"], padding), dim=1)
                         data_random_dict[i]["edge_mask"] = stacked_edge_mask
 
                         #for noisy positions and features for j plus
                         noisy_positions_random_dict[i] = noisy_positions_random_dict[i] #check this
-                        padding = torch.zeros(noisy_positions_random_dict[i].shape[0], num_atoms_to_stack, noisy_positions_random_dict[i].shape[2]).to(device)
+                        padding = torch.zeros(noisy_positions_random_dict[i].shape[0], num_atoms_to_stack, noisy_positions_random_dict[i].shape[2]).to(args.device)
                         stacked_positions = torch.cat((noisy_positions_random_dict[i], padding), dim=1)
                         noisy_positions_random_dict[i] = stacked_positions
 
                         noisy_features_random_dict[i] = noisy_features_random_dict[i]
-                        padding = torch.zeros(noisy_features_random_dict[i].shape[0], num_atoms_to_stack, noisy_features_random_dict[i].shape[2]).to(device)
+                        padding = torch.zeros(noisy_features_random_dict[i].shape[0], num_atoms_to_stack, noisy_features_random_dict[i].shape[2]).to(args.device)
                         stacked_features = torch.cat((noisy_features_random_dict[i], padding), dim=1)
                         noisy_features_random_dict[i] = stacked_features
                         
@@ -1219,16 +1221,16 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
                 # print("data j plus batch positions shape", data_j_plus_batch["positions"].shape)
 
                 
-                chain_j_plus_batch, node_mask_j_plus_batch = model.sample_chain(data_j_plus_batch, keep_frames=keep_frames, noisy_positions=noisy_positions_batch_j_plus, noisy_features=noisy_features_batch_j_plus)
+                chain_j_plus_batch, node_mask_j_plus_batch = model.sample_chain(data_j_plus_batch, keep_frames=args.keep_frames, noisy_positions=noisy_positions_batch_j_plus, noisy_features=noisy_features_batch_j_plus)
 
                 chain_j_plus = chain_j_plus_batch[0, :, :, :] #it should take the first frame and all batch elements -> check it is really the first frame (I need the one at t0, the final generated molecule)
                 
 
-                chain_j_minus_batch, node_mask_j_minus_batch = model.sample_chain(data_j_minus_batch, keep_frames=keep_frames, noisy_positions=noisy_positions_batch_j_minus, noisy_features=noisy_features_batch_j_minus)
+                chain_j_minus_batch, node_mask_j_minus_batch = model.sample_chain(data_j_minus_batch, keep_frames=args.keep_frames, noisy_positions=noisy_positions_batch_j_minus, noisy_features=noisy_features_batch_j_minus)
 
                 chain_j_minus = chain_j_minus_batch[0, :, :, :]
 
-                chain_random_batch, node_mask_random_batch = model.sample_chain(data_random_batch, keep_frames=keep_frames, noisy_positions=noisy_positions_batch_random, noisy_features=noisy_features_batch_random)
+                chain_random_batch, node_mask_random_batch = model.sample_chain(data_random_batch, keep_frames=args.keep_frames, noisy_positions=noisy_positions_batch_random, noisy_features=noisy_features_batch_random)
 
                 chain_random = chain_random_batch[0, :, :, :]
                 
@@ -1345,7 +1347,7 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
             # Saving chains and final states
             for i in range(len(data['positions'])):
                 chain = chain_batch[:, i, :, :]
-                assert chain.shape[0] == keep_frames
+                assert chain.shape[0] == args.keep_frames
                 assert chain.shape[1] == data['positions'].shape[1]
                 assert chain.shape[2] == data['positions'].shape[2] + data['one_hot'].shape[2] + model.include_charges
 
@@ -1376,15 +1378,15 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
                     one_hot_combined,
                     positions_combined,
                     node_mask[i].unsqueeze(0),
-                    names=[f'{name}_' + str(keep_frames)],
+                    names=[f'{name}_' + str(args.keep_frames)],
                     is_geom=model.is_geom
                 )
 
                 # one_hot = chain[:, :, 3:-1]
                 one_hot = chain[:, :, 3:] #@mastro, added last atom type (not sure whyt it was not included...) However, TODO check again
                 positions = chain[:, :, :3]
-                chain_node_mask = torch.cat([node_mask[i].unsqueeze(0) for _ in range(keep_frames)], dim=0)
-                names = [f'{name}_{j}' for j in range(keep_frames)]
+                chain_node_mask = torch.cat([node_mask[i].unsqueeze(0) for _ in range(args.keep_frames)], dim=0)
+                names = [f'{name}_{j}' for j in range(args.keep_frames)]
 
                 save_xyz_file(chain_output, one_hot, positions, chain_node_mask, names=names, is_geom=model.is_geom)
                 visualize_chain_xai(

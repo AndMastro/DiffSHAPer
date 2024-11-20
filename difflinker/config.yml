@@ -5,7 +5,8 @@ PREFIX: "zinc_final_test"
 KEEP_FRAMES: 10
 P: "0.5" #can be a float values (passed as a string), node_density, edge_density, edge_node_ratio, or node_edge_ratio 
 SEED: 42
-DEVICE: "cuda:5"
+DEVICE: "cuda:0"
 NUM_SAMPLES: 30 #number of samples to explain
 SAVE_VISUALIZATIONS: True
 M: 100 #number of Monte Carlo sampling steps for Shapley values approximation
+REMOVAL: True #True to have atom removal strategy for ablation study, False to have addition strategy

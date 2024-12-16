@@ -4,10 +4,16 @@ DATA: "datasets"
 PREFIX: "zinc_final_test"
 KEEP_FRAMES: 10
 P: "0.5" #can be a float values (passed as a string), node_density, edge_density, edge_node_ratio, or node_edge_ratio 
-SEED: 42
-DEVICE: "cuda:6"
+SEED: 42 #seed for the general random number generator
+DEVICE: "cuda:2"
 NUM_SAMPLES: 30 #number of samples to explain
 SAVE_VISUALIZATION: True
 PARALLEL_STEPS: 100
 M: 100 #number of Monte Carlo sampling steps for Shapley values approximation
-REMOVAL: True #True to have atom removal strategy for ablation study, False to have addition strategy
+REMOVAL: False #True to have atom removal strategy for ablation study, False to have addition strategy
+DIAGONALIZE: False #True to have diagonalized Coulomb, False to have standard Coulomb matrix
+ROTATE: True #True to have rotation of the molecule, False to have no rotation
+TRANSLATE: False #True to have translation of the molecule, False to have no translation
+REFLECT: False #True to have reflection of the molecule, False to have no reflection
+TRANSFORMATION_SEED: 42 #seed for random transformations
+

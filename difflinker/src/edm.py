@@ -633,6 +633,76 @@ class InpaintingEDM(EDM):
         chain[0] = xh_out
 
         return chain
+    
+    #@mastro edited
+    @torch.no_grad()
+    def sample_chain_atom_addition(self, x, h, node_mask, edge_mask, fragment_mask, linker_mask, context, keep_frames=None, noisy_positions = None, noisy_features = None):
+        n_samples = x.size(0)
+        n_nodes = x.size(1)
+
+        # Normalization and concatenation
+        x, h, = self.normalize(x, h)
+        xh = torch.cat([x, h], dim=2)
+
+        # Sampling initial noise @mastro if noisy_positions and noisy_features are not None, they are used to sample the initial noise
+        z = self.sample_combined_position_feature_noise(n_samples, n_nodes, node_mask, noisy_positions, noisy_features)
+
+        if keep_frames is None:
+            keep_frames = self.T
+        else:
+            assert keep_frames <= self.T
+        chain = torch.zeros((keep_frames,) + z.size(), device=z.device)
+
+        # Sample p(z_s | z_t)
+        for s in reversed(range(0, self.T)):
+            s_array = torch.full((n_samples, 1), fill_value=s, device=z.device)
+            t_array = s_array + 1
+            s_array = s_array / self.T
+            t_array = t_array / self.T
+
+            z_linker_only_sampled = self.sample_p_zs_given_zt(
+                s=s_array,
+                t=t_array,
+                z_t=z,
+                node_mask=node_mask,
+                edge_mask=edge_mask,
+                context=context,
+            )
+            z_fragments_only_sampled = self.sample_q_zs_given_zt_and_x(
+                s=s_array,
+                t=t_array,
+                z_t=z,
+                x=xh * fragment_mask,
+                node_mask=fragment_mask,
+            )
+            z = z_linker_only_sampled * linker_mask + z_fragments_only_sampled * fragment_mask
+
+            # Project down to avoid numerical runaway of the center of gravity
+            z_x = utils.remove_mean_with_mask(z[:, :, :self.n_dims], node_mask)
+            z_h = z[:, :, self.n_dims:]
+            z = torch.cat([z_x, z_h], dim=2)
+
+            # Saving step to the chain
+            write_index = (s * keep_frames) // self.T
+            chain[write_index] = self.unnormalize_z(z)
+
+        # Finally sample p(x, h | z_0)
+        x_out_linker, h_out_linker = self.sample_p_xh_given_z0(
+            z_0=z,
+            node_mask=node_mask,
+            edge_mask=edge_mask,
+            context=context,
+        )
+        x_out_fragments, h_out_fragments = self.sample_q_xh_given_z0_and_x(z_0=z, node_mask=node_mask)
+
+        xh_out_linker = torch.cat([x_out_linker, h_out_linker], dim=2)
+        xh_out_fragments = torch.cat([x_out_fragments, h_out_fragments], dim=2)
+        xh_out = xh_out_linker * linker_mask + xh_out_fragments * fragment_mask
+
+        # Overwrite last frame with the resulting x and h
+        chain[0] = xh_out
+
+        return chain
 
     def sample_p_zs_given_zt(self, s, t, z_t, node_mask, edge_mask, context):
         """Samples from zs ~ p(zs | zt). Only used during sampling"""

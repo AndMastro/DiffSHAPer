@@ -468,6 +468,79 @@ class DDPM(pl.LightningModule):
             noisy_features=noisy_features
         )
         return chain, node_mask
+    
+    def sample_chain_atom_addition(self, data, sample_fn=None, keep_frames=None, noisy_positions=None, noisy_features=None, orginal_data = None, noisy_positions_original = None, noisy_features_original = None, frame_to_add = 1):
+        if sample_fn is None:
+            linker_sizes = data['linker_mask'].sum(1).view(-1).int()
+        else:
+            linker_sizes = sample_fn(data)
+
+        if self.inpainting:
+            template_data = data
+        else:
+            template_data = create_templates_for_linker_generation(data, linker_sizes)
+            
+        x = template_data['positions']
+        node_mask = template_data['atom_mask']
+        edge_mask = template_data['edge_mask']
+        h = template_data['one_hot']
+        anchors = template_data['anchors']
+        fragment_mask = template_data['fragment_mask']
+        linker_mask = template_data['linker_mask']
+
+        x_original = orginal_data['positions']
+        node_mask_original = orginal_data['atom_mask']
+        edge_mask_original = orginal_data['edge_mask']
+        h_original = orginal_data['one_hot']
+        anchors_original = orginal_data['anchors']
+        fragment_mask_original = orginal_data['fragment_mask']
+        linker_mask_original = orginal_data['linker_mask']
+
+        # Anchors and fragments labels are used as context
+        if self.anchors_context:
+            context = torch.cat([anchors, fragment_mask], dim=-1)
+        else:
+            context = fragment_mask
+
+        # Add information about pocket to the context
+        if '.' in self.train_data_prefix:
+            fragment_pocket_mask = fragment_mask
+            fragment_only_mask = template_data['fragment_only_mask']
+            pocket_only_mask = fragment_pocket_mask - fragment_only_mask
+            if self.anchors_context:
+                context = torch.cat([anchors, fragment_only_mask, pocket_only_mask], dim=-1)
+            else:
+                context = torch.cat([fragment_only_mask, pocket_only_mask], dim=-1)
+
+        # Removing COM of fragments from the atom coordinates
+        if self.inpainting:
+            center_of_mass_mask = node_mask
+        elif isinstance(self.val_dataset, MOADDataset) and self.center_of_mass == 'fragments':
+            center_of_mass_mask = template_data['fragment_only_mask']
+        elif self.center_of_mass == 'fragments':
+            center_of_mass_mask = fragment_mask
+            center_of_mass_mask_original = fragment_mask_original
+        elif self.center_of_mass == 'anchors':
+            center_of_mass_mask = anchors
+        else:
+            raise NotImplementedError(self.center_of_mass)
+        x = utils.remove_partial_mean_with_mask(x, node_mask, center_of_mass_mask)
+        x_original = utils.remove_partial_mean_with_mask(x_original, node_mask_original, center_of_mass_mask_original)
+
+        #@mastro edited, added noisy_positions and noisy_features
+        chain = self.edm.sample_chain_atom_addition(
+            x=x,
+            h=h,
+            node_mask=node_mask,
+            edge_mask=edge_mask,
+            fragment_mask=fragment_mask,
+            linker_mask=linker_mask,
+            context=context,
+            keep_frames=keep_frames,
+            noisy_positions=noisy_positions,
+            noisy_features=noisy_features
+        )
+        return chain, node_mask
 
     def configure_optimizers(self):
         return torch.optim.AdamW(self.edm.parameters(), lr=self.lr, amsgrad=True, weight_decay=1e-12)

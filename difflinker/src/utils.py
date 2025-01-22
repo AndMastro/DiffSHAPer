@@ -73,6 +73,17 @@ def remove_partial_mean_with_mask(x, node_mask, center_of_mass_mask):
     x = x - mean * node_mask
     return x
 
+#@mastro new function added
+def add_partial_mean_with_mask(x, node_mask, center_of_mass_mask):
+    """
+    Add center of mass of fragments to coordinates of all atoms
+    """
+    x_masked = x * center_of_mass_mask
+    N = center_of_mass_mask.sum(1, keepdims=True)
+    mean = torch.sum(x_masked, dim=1, keepdim=True) / N
+    x = x + mean * node_mask
+    return x
+
 
 def assert_mean_zero(x):
     mean = torch.mean(x, dim=1, keepdim=True)

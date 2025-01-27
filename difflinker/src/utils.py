@@ -79,8 +79,12 @@ def add_partial_mean_with_mask(x, node_mask, center_of_mass_mask):
     Add center of mass of fragments to coordinates of all atoms
     """
     x_masked = x * center_of_mass_mask
+    print("X masked, ", x_masked)
     N = center_of_mass_mask.sum(1, keepdims=True)
+    print("N, ", N)
     mean = torch.sum(x_masked, dim=1, keepdim=True) / N
+    print("Mean, ", mean)
+    print("mean * node_mask, ", mean * node_mask)
     x = x + mean * node_mask
     return x
 

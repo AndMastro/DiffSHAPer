@@ -10,8 +10,8 @@ NUM_SAMPLES: 30 #number of samples to explain
 SAVE_VISUALIZATION: True
 PARALLEL_STEPS: 100
 M: 100 #number of Monte Carlo sampling steps for Shapley values approximation
-REMOVAL: True #True to have atom removal strategy for ablation study, False to have addition strategy
-ATOM_PERTURBATION: False #True to have atom perturbation strategy for analysis purposes, False to have no atom perturbation (it has no effect on explanation scripts)
+REMOVAL: False #True to have atom removal strategy for ablation study, False to have addition strategy
+ATOM_PERTURBATION: True #True to have atom perturbation strategy for analysis purposes, False to have no atom perturbation (it has no effect on explanation scripts)
 DIAGONALIZE: False #True to have diagonalized Coulomb, False to have standard Coulomb matrix
 ROTATE: False #True to have rotation of the molecule, False to have no rotation
 TRANSLATE: False #True to have translation of the molecule, False to have no translation

@@ -469,7 +469,7 @@ class DDPM(pl.LightningModule):
         )
         return chain, node_mask
     
-    def sample_chain_atom_addition(self, data, sample_fn=None, keep_frames=None, noisy_positions=None, noisy_features=None, orginal_data = None, noisy_positions_original = None, noisy_features_original = None, frame_to_add = 1):
+    def sample_chain_atom_injection(self, data, sample_fn=None, keep_frames=None, noisy_positions=None, noisy_features=None, orginal_data = None, noisy_positions_original = None, noisy_features_original = None, injection_frame = 1):
         if sample_fn is None:
             linker_sizes = data['linker_mask'].sum(1).view(-1).int()
         else:
@@ -528,7 +528,7 @@ class DDPM(pl.LightningModule):
         x_original = utils.remove_partial_mean_with_mask(x_original, node_mask_original, center_of_mass_mask_original)
 
         #@mastro edited, added noisy_positions and noisy_features
-        chain = self.edm.sample_chain_atom_addition(
+        chain = self.edm.sample_chain_atom_injection(
             x=x,
             h=h,
             node_mask=node_mask,
@@ -538,7 +538,16 @@ class DDPM(pl.LightningModule):
             context=context,
             keep_frames=keep_frames,
             noisy_positions=noisy_positions,
-            noisy_features=noisy_features
+            noisy_features=noisy_features,
+            x_original = x_original,
+            h_original = h_original,
+            node_mask_original = node_mask_original,
+            edge_mask_original = edge_mask_original,
+            fragment_mask_original = fragment_mask_original,
+            linker_mask_original = linker_mask_original,
+            noisy_positions_original = noisy_positions_original,
+            noisy_features_original = noisy_features_original,
+            injection_frame = injection_frame
         )
         return chain, node_mask
 

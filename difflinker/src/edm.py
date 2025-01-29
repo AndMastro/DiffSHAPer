@@ -636,7 +636,7 @@ class InpaintingEDM(EDM):
     
     #@mastro edited
     @torch.no_grad()
-    def sample_chain_atom_addition(self, x, h, node_mask, edge_mask, fragment_mask, linker_mask, context, keep_frames=None, noisy_positions = None, noisy_features = None):
+    def sample_chain_atom_injection(self, x, h, node_mask, edge_mask, fragment_mask, linker_mask, context, keep_frames=None, noisy_positions = None, noisy_features = None, x_original = None, h_original = None, node_mask_original = None, fragment_mask_original = None, linker_mask_original = None, edge_mask_original = None, noisy_positions_original = None, noisy_features_original = None, injection_frame = None):
         n_samples = x.size(0)
         n_nodes = x.size(1)
 

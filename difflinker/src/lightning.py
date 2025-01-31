@@ -469,7 +469,7 @@ class DDPM(pl.LightningModule):
         )
         return chain, node_mask
     
-    def sample_chain_atom_injection(self, data, sample_fn=None, keep_frames=None, noisy_positions=None, noisy_features=None, orginal_data = None, noisy_positions_original = None, noisy_features_original = None, injection_frame = 1):
+    def sample_chain_atom_injection(self, data, sample_fn=None, keep_frames=None, noisy_positions=None, noisy_features=None, orginal_data = None, noisy_positions_original = None, noisy_features_original = None, atom_indices_kept = None, injection_step = 1):
         if sample_fn is None:
             linker_sizes = data['linker_mask'].sum(1).view(-1).int()
         else:
@@ -499,18 +499,25 @@ class DDPM(pl.LightningModule):
         # Anchors and fragments labels are used as context
         if self.anchors_context:
             context = torch.cat([anchors, fragment_mask], dim=-1)
+            context_original = torch.cat([anchors_original, fragment_mask_original], dim=-1)
         else:
             context = fragment_mask
+            context_original = fragment_mask_original
 
         # Add information about pocket to the context
         if '.' in self.train_data_prefix:
             fragment_pocket_mask = fragment_mask
             fragment_only_mask = template_data['fragment_only_mask']
             pocket_only_mask = fragment_pocket_mask - fragment_only_mask
+            fragment_pocket_mask_original = fragment_mask_original
+            fragment_only_mask_original = orginal_data['fragment_only_mask']
+            pocket_only_mask_original = fragment_pocket_mask_original - fragment_only_mask_original
             if self.anchors_context:
                 context = torch.cat([anchors, fragment_only_mask, pocket_only_mask], dim=-1)
+                context_original = torch.cat([anchors_original, fragment_only_mask_original, pocket_only_mask_original], dim=-1)
             else:
                 context = torch.cat([fragment_only_mask, pocket_only_mask], dim=-1)
+                context_original = torch.cat([fragment_only_mask_original, pocket_only_mask_original], dim=-1)
 
         # Removing COM of fragments from the atom coordinates
         if self.inpainting:
@@ -528,7 +535,7 @@ class DDPM(pl.LightningModule):
         x_original = utils.remove_partial_mean_with_mask(x_original, node_mask_original, center_of_mass_mask_original)
 
         #@mastro edited, added noisy_positions and noisy_features
-        chain = self.edm.sample_chain_atom_injection(
+        chain_before_injection, chain_after_injection = self.edm.sample_chain_atom_injection(
             x=x,
             h=h,
             node_mask=node_mask,
@@ -545,11 +552,13 @@ class DDPM(pl.LightningModule):
             edge_mask_original = edge_mask_original,
             fragment_mask_original = fragment_mask_original,
             linker_mask_original = linker_mask_original,
+            context_original = context_original,
             noisy_positions_original = noisy_positions_original,
             noisy_features_original = noisy_features_original,
-            injection_frame = injection_frame
+            atom_indices_kept = atom_indices_kept,
+            injection_step = injection_step
         )
-        return chain, node_mask
+        return chain_before_injection, node_mask, chain_after_injection, node_mask_original
 
     def configure_optimizers(self):
         return torch.optim.AdamW(self.edm.parameters(), lr=self.lr, amsgrad=True, weight_decay=1e-12)

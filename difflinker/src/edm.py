@@ -186,6 +186,128 @@ class EDM(torch.nn.Module):
         chain[0] = torch.cat([x, h], dim=2)
 
         return chain
+    
+    #@mastro edited
+    @torch.no_grad()
+    def sample_chain_atom_injection(self, x, h, node_mask, edge_mask, fragment_mask, linker_mask, context, keep_frames=None, noisy_positions = None, noisy_features = None, x_original = None, h_original = None, node_mask_original = None, fragment_mask_original = None, linker_mask_original = None, context_original = None, edge_mask_original = None, noisy_positions_original = None, noisy_features_original = None, atom_indices_kept = None, injection_step = 1):
+        n_samples = x.size(0)
+        n_nodes = x.size(1)
+        n_samples_original = x_original.size(0)
+        n_nodes_original = x_original.size(1)
+
+        x = x.to(self.device) #@mastro added this line
+        h = h.to(self.device) #@mastro added this line
+        node_mask = node_mask.to(self.device) #@mastro added this line
+        fragment_mask = fragment_mask.to(self.device) #@mastro added this line
+        linker_mask = linker_mask.to(self.device) #@mastro added this line
+        edge_mask = edge_mask.to(self.device) #@mastro added this line
+        context = context.to(self.device) #@mastro added this line
+
+        x_original = x_original.to(self.device) #@mastro added this line
+        h_original = h_original.to(self.device) #@mastro added this line
+        node_mask_original = node_mask_original.to(self.device) #@mastro added this line
+        fragment_mask_original = fragment_mask_original.to(self.device) #@mastro added this line
+        linker_mask_original = linker_mask_original.to(self.device) #@mastro added this line
+        edge_mask_original = edge_mask_original.to(self.device) #@mastro added this line
+        context_original = context_original.to(self.device) #@mastro added this line
+
+        # Normalization and concatenation
+        x, h, = self.normalize(x, h)
+        xh = torch.cat([x, h], dim=2)
+        
+        x_original, h_original, = self.normalize(x_original, h_original)
+        xh_original = torch.cat([x_original, h_original], dim=2)
+        # Sampling initial noise @mastro if noisy_positions and noisy_features are not None, they are used to sample the initial noise
+        z = self.sample_combined_position_feature_noise(n_samples, n_nodes, mask=linker_mask, noisy_positions = noisy_positions, noisy_features = noisy_features)
+        z = xh * fragment_mask + z * linker_mask
+
+        z_original = self.sample_combined_position_feature_noise(n_samples_original, n_nodes_original, mask=linker_mask_original, noisy_positions = noisy_positions_original, noisy_features = noisy_features_original)
+        z_original = xh_original * fragment_mask_original + z_original * linker_mask_original
+
+        if keep_frames is None:
+            keep_frames = self.T
+        else:
+            assert keep_frames <= self.T
+
+        chain_before_injection = torch.zeros((keep_frames,) + z.size(), device=z.device)
+        chain_after_injection = torch.zeros((keep_frames,) + z_original.size(), device=z_original.device)
+
+        # Sample p(z_s | z_t)
+        # This is the chain before atom injection
+        for s in reversed(range(injection_step + 1, self.T)):
+            s_array = torch.full((n_samples, 1), fill_value=s, device=z_original.device)
+            t_array = s_array + 1
+            s_array = s_array / self.T
+            t_array = t_array / self.T
+
+            z = self.sample_p_zs_given_zt_only_linker(
+                s=s_array,
+                t=t_array,
+                z_t=z,
+                node_mask=node_mask,
+                fragment_mask=fragment_mask,
+                linker_mask=linker_mask,
+                edge_mask=edge_mask,
+                context=context,
+            )
+
+            # Saving step to the chain
+            write_index = (s * keep_frames) // self.T
+            # write_index = (s * (self.T - injection_frame)) // (self.T - injection_frame) #check if correct
+            chain_before_injection[write_index] = self.unnormalize_z(z) #we would need to pad the chain to read the dimension of original data
+
+        #we need a new z which is the same as z_original but that will keep its elements at the indices it has
+
+        # Ensure z contains the same number of elements as atom_indices_kept
+        assert z.size(1) == len(atom_indices_kept), "z must contain the same number of elements as atom_indices_kept"
+
+        # Modify z_original to keep elements from z at positions specified by atom_indices_kept
+        for i, idx in enumerate(atom_indices_kept):
+            z_original[:, idx, :] = z[:, i, :]
+
+        
+        #from here on, original data should be used
+        # this is the chain after atom injection
+        for s in reversed(range(0, injection_step)):
+            s_array = torch.full((n_samples_original, 1), fill_value=s, device=z_original.device)
+            t_array = s_array + 1
+            s_array = s_array / self.T
+            t_array = t_array / self.T
+
+            z_original = self.sample_p_zs_given_zt_only_linker(
+                s=s_array,
+                t=t_array,
+                z_t=z_original,
+                node_mask=node_mask_original,
+                fragment_mask=fragment_mask_original,
+                linker_mask=linker_mask_original,
+                edge_mask=edge_mask_original,
+                context=context_original,
+            )
+
+
+            # Saving step to the chain
+            # write_index = (s * injection_frame + 1) // injection_frame + 1
+            write_index = (s * keep_frames) // self.T
+            chain_after_injection[write_index] = self.unnormalize_z(z_original)
+
+        
+        
+        # Finally sample p(x, h | z_0)
+        # The chain after atom injection and original data should be used here
+        x_original, h_original = self.sample_p_xh_given_z0_only_linker(
+            z_0=z_original,
+            node_mask=node_mask_original,
+            fragment_mask=fragment_mask_original,
+            linker_mask=linker_mask_original,
+            edge_mask=edge_mask_original,
+            context=context_original,
+        )
+
+        # Overwrite last frame with the resulting x and h
+        chain_after_injection[0] = torch.cat([x_original, h_original], dim=2)
+
+        return chain_before_injection, chain_after_injection
 
     def sample_p_zs_given_zt_only_linker(self, s, t, z_t, node_mask, fragment_mask, linker_mask, edge_mask, context):
         """Samples from zs ~ p(zs | zt). Only used during sampling. Samples only linker features and coords"""
@@ -636,29 +758,35 @@ class InpaintingEDM(EDM):
     
     #@mastro edited
     @torch.no_grad()
-    def sample_chain_atom_injection(self, x, h, node_mask, edge_mask, fragment_mask, linker_mask, context, keep_frames=None, noisy_positions = None, noisy_features = None, x_original = None, h_original = None, node_mask_original = None, fragment_mask_original = None, linker_mask_original = None, edge_mask_original = None, noisy_positions_original = None, noisy_features_original = None, injection_frame = None):
+    def sample_chain_atom_injection(self, x, h, node_mask, edge_mask, fragment_mask, linker_mask, context, keep_frames=None, noisy_positions = None, noisy_features = None, x_original = None, h_original = None, node_mask_original = None, fragment_mask_original = None, linker_mask_original = None, context_original = None, edge_mask_original = None, noisy_positions_original = None, noisy_features_original = None, atom_indices_kept = None, injection_frame = None):
         n_samples = x.size(0)
         n_nodes = x.size(1)
 
         # Normalization and concatenation
         x, h, = self.normalize(x, h)
         xh = torch.cat([x, h], dim=2)
-
+        
+        x_original, h_original, = self.normalize(x_original, h_original)
+        xh_original = torch.cat([x_original, h_original], dim=2)
         # Sampling initial noise @mastro if noisy_positions and noisy_features are not None, they are used to sample the initial noise
         z = self.sample_combined_position_feature_noise(n_samples, n_nodes, node_mask, noisy_positions, noisy_features)
+        z_original = self.sample_combined_position_feature_noise(n_samples, n_nodes, node_mask_original, noisy_positions_original, noisy_features_original)
 
         if keep_frames is None:
             keep_frames = self.T
         else:
             assert keep_frames <= self.T
-        chain = torch.zeros((keep_frames,) + z.size(), device=z.device)
+
+        chain_before_injection = torch.zeros((keep_frames,) + z.size(), device=z.device)
+        chain_after_injection = torch.zeros((keep_frames,) + z_original.size(), device=z_original.device)
 
         # Sample p(z_s | z_t)
-        for s in reversed(range(0, self.T)):
+        # This is the chain before atom injection
+        for s in reversed(range(injection_frame + 1, self.T)):
             s_array = torch.full((n_samples, 1), fill_value=s, device=z.device)
             t_array = s_array + 1
-            s_array = s_array / self.T
-            t_array = t_array / self.T
+            s_array = s_array / (self.T - injection_frame) 
+            t_array = t_array / (self.T - injection_frame) 
 
             z_linker_only_sampled = self.sample_p_zs_given_zt(
                 s=s_array,
@@ -683,26 +811,74 @@ class InpaintingEDM(EDM):
             z = torch.cat([z_x, z_h], dim=2)
 
             # Saving step to the chain
-            write_index = (s * keep_frames) // self.T
-            chain[write_index] = self.unnormalize_z(z)
+            # write_index = (s * keep_frames) // self.T
+            write_index = (s * keep_frames) // (self.T - injection_frame) #check if correct
+            chain_before_injection[write_index] = self.unnormalize_z(z) #we would need to pad the chain to read the dimension of original data
 
+        #we need a new z which is the same as z_original but that will keep its elements at the indices it has
+        #TODO
+
+        # Ensure z contains the same number of elements as atom_indices_kept
+        assert z.size(1) == len(atom_indices_kept), "z must contain the same number of elements as atom_indices_kept"
+
+        # Modify z_original to keep elements from z at positions specified by atom_indices_kept
+        for i, idx in enumerate(atom_indices_kept):
+            z_original[:, idx, :] = z[:, i, :]
+
+        #from here on, original data should be used
+        # this is the chain after atom injection
+        for s in reversed(range(0, injection_frame + 1)):
+            s_array = torch.full((n_samples, 1), fill_value=s, device=z_original.device)
+            t_array = s_array + 1
+            s_array = s_array / (injection_frame + 1)
+            t_array = t_array / (injection_frame + 1)
+
+            z_linker_only_sampled = self.sample_p_zs_given_zt(
+                s=s_array,
+                t=t_array,
+                z_t=z_original,
+                node_mask=node_mask_original,
+                edge_mask=edge_mask_original,
+                context=context_original,
+            )
+            z_fragments_only_sampled = self.sample_q_zs_given_zt_and_x(
+                s=s_array,
+                t=t_array,
+                z_t=z_original,
+                x=xh_original * fragment_mask_original,
+                node_mask=fragment_mask_original,
+            )
+            z_original = z_linker_only_sampled * linker_mask_original + z_fragments_only_sampled * fragment_mask_original
+
+            # Project down to avoid numerical runaway of the center of gravity
+            z_x_original = utils.remove_mean_with_mask(z[:, :, :self.n_dims], node_mask_original)
+            z_h_original = z[:, :, self.n_dims:]
+            z_original = torch.cat([z_x_original, z_h_original], dim=2)
+
+            # Saving step to the chain
+            write_index = (s * keep_frames) // injection_frame + 1
+            chain_after_injection[write_index] = self.unnormalize_z(z_original)
+
+        
+        
         # Finally sample p(x, h | z_0)
+        # The chain after atom injection and original data should be used here
         x_out_linker, h_out_linker = self.sample_p_xh_given_z0(
-            z_0=z,
-            node_mask=node_mask,
-            edge_mask=edge_mask,
-            context=context,
+            z_0=z_original,
+            node_mask=node_mask_original,
+            edge_mask=edge_mask_original,
+            context=context_original,
         )
-        x_out_fragments, h_out_fragments = self.sample_q_xh_given_z0_and_x(z_0=z, node_mask=node_mask)
+        x_out_fragments, h_out_fragments = self.sample_q_xh_given_z0_and_x(z_0=z_original, node_mask=node_mask_original)
 
         xh_out_linker = torch.cat([x_out_linker, h_out_linker], dim=2)
         xh_out_fragments = torch.cat([x_out_fragments, h_out_fragments], dim=2)
-        xh_out = xh_out_linker * linker_mask + xh_out_fragments * fragment_mask
+        xh_out = xh_out_linker * linker_mask_original + xh_out_fragments * fragment_mask_original
 
         # Overwrite last frame with the resulting x and h
-        chain[0] = xh_out
+        chain_after_injection[0] = xh_out
 
-        return chain
+        return chain_before_injection, chain_after_injection
 
     def sample_p_zs_given_zt(self, s, t, z_t, node_mask, edge_mask, context):
         """Samples from zs ~ p(zs | zt). Only used during sampling"""

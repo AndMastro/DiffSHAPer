@@ -268,7 +268,7 @@ class EDM(torch.nn.Module):
         
         #from here on, original data should be used
         # this is the chain after atom injection
-        for s in reversed(range(0, self.T - injection_step)):
+        for s in reversed(range(0, self.T - injection_step - 1)):
             s_array = torch.full((n_samples_original, 1), fill_value=s, device=z_original.device)
             t_array = s_array + 1
             s_array = s_array / self.T

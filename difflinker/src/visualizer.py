@@ -30,14 +30,19 @@ def save_xyz_file(path, one_hot, positions, node_mask, names, is_geom, suffix=''
             ))
         f.close()
 
-
-def load_xyz_files(path, suffix=''):
+#@mastro edited
+def load_xyz_files(path, suffix='', file_indices=None):
     files = []
+    
     for fname in os.listdir(path):
         if fname.endswith(f'_{suffix}.xyz'):
             files.append(fname)
     files = sorted(files, key=lambda f: -int(f.replace(f'_{suffix}.xyz', '').split('_')[-1]))
+    
+    if file_indices is not None:
+        files = [file for file in files if int(file.split('_')[-2]) in file_indices]
     return [os.path.join(path, fname) for fname in files]
+    
 
 
 def load_molecule_xyz(file, is_geom):

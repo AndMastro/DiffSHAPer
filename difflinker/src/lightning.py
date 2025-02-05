@@ -477,8 +477,10 @@ class DDPM(pl.LightningModule):
 
         if self.inpainting:
             template_data = data
+            template_data_original = orginal_data
         else:
             template_data = create_templates_for_linker_generation(data, linker_sizes)
+            template_data_original = create_templates_for_linker_generation(orginal_data, linker_sizes)
             
         x = template_data['positions']
         node_mask = template_data['atom_mask']
@@ -488,13 +490,13 @@ class DDPM(pl.LightningModule):
         fragment_mask = template_data['fragment_mask']
         linker_mask = template_data['linker_mask']
 
-        x_original = orginal_data['positions']
-        node_mask_original = orginal_data['atom_mask']
-        edge_mask_original = orginal_data['edge_mask']
-        h_original = orginal_data['one_hot']
-        anchors_original = orginal_data['anchors']
-        fragment_mask_original = orginal_data['fragment_mask']
-        linker_mask_original = orginal_data['linker_mask']
+        x_original = template_data_original['positions']
+        node_mask_original = template_data_original['atom_mask']
+        edge_mask_original = template_data_original['edge_mask']
+        h_original = template_data_original['one_hot']
+        anchors_original = template_data_original['anchors']
+        fragment_mask_original = template_data_original['fragment_mask']
+        linker_mask_original = template_data_original['linker_mask']
 
         # Anchors and fragments labels are used as context
         if self.anchors_context:
@@ -531,8 +533,22 @@ class DDPM(pl.LightningModule):
             center_of_mass_mask = anchors
         else:
             raise NotImplementedError(self.center_of_mass)
+        
+        #manually removing the original center of mass from x
+        # x_original_masked = x_original * center_of_mass_mask_original
+        # N = center_of_mass_mask_original.sum(1, keepdims=True)
+        # mean_original = torch.sum(x_original_masked, dim=1, keepdim=True) / N
+        # x = x - mean_original * node_mask
+
+        # x_original = utils.remove_partial_mean_with_mask(x_original, node_mask_original, center_of_mass_mask_original)
+
+        #manually removing the center of mass of the smaller fragments from x_original
+        x_masked = x * center_of_mass_mask
+        N = center_of_mass_mask.sum(1, keepdims=True)
+        mean_x = torch.sum(x_masked, dim=1, keepdim=True) / N
+        x_original = x_original - mean_x * node_mask_original
+
         x = utils.remove_partial_mean_with_mask(x, node_mask, center_of_mass_mask)
-        x_original = utils.remove_partial_mean_with_mask(x_original, node_mask_original, center_of_mass_mask_original)
 
         #@mastro edited, added noisy_positions and noisy_features
         chain_before_injection, chain_after_injection = self.edm.sample_chain_atom_injection(

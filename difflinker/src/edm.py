@@ -223,7 +223,8 @@ class EDM(torch.nn.Module):
 
         z_original = self.sample_combined_position_feature_noise(n_samples_original, n_nodes_original, mask=linker_mask_original, noisy_positions = noisy_positions_original, noisy_features = noisy_features_original)
         z_original = xh_original * fragment_mask_original + z_original * linker_mask_original
-
+        
+        
         if keep_frames is None:
             keep_frames = self.T
         else:
@@ -235,7 +236,7 @@ class EDM(torch.nn.Module):
         # Sample p(z_s | z_t)
         # This is the chain before atom injection
         for s in reversed(range(self.T - injection_step + 1, self.T)):
-            s_array = torch.full((n_samples, 1), fill_value=s, device=z_original.device)
+            s_array = torch.full((n_samples, 1), fill_value=s, device=z.device)
             t_array = s_array + 1
             s_array = s_array / self.T
             t_array = t_array / self.T
@@ -268,7 +269,7 @@ class EDM(torch.nn.Module):
         
         #from here on, original data should be used
         # this is the chain after atom injection
-        for s in reversed(range(0, self.T - injection_step - 1)):
+        for s in reversed(range(0, self.T - injection_step)):
             s_array = torch.full((n_samples_original, 1), fill_value=s, device=z_original.device)
             t_array = s_array + 1
             s_array = s_array / self.T

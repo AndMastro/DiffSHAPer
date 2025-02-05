@@ -14,6 +14,7 @@ os.environ["https_proxy"] = "http://web-proxy.informatik.uni-bonn.de:3128"
 
 import argparse
 import torch
+import copy
 
 from src.datasets import get_dataloader
 from src.lightning import DDPM
@@ -31,18 +32,16 @@ import random
 from sklearn.decomposition import PCA
 from src.visualizer import load_molecule_xyz, load_xyz_files
 import matplotlib.pyplot as plt
-import imageio
+import imageio.v2 as imageio
 from src import const
 import networkx as nx
 import time 
 import yaml
 from pysmiles import read_smiles
-#get running device from const file
+
 
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
-# Simulate command-line arguments
 
-# density = sys.argv[sys.argv.index("--P") + 1]
 with open('config.yml', 'r') as file:
     config = yaml.safe_load(file)
 
@@ -54,13 +53,34 @@ keep_frames = int(config['KEEP_FRAMES'])
 P = config['P']
 device = config['DEVICE'] if torch.cuda.is_available() else 'cpu'
 SEED = int(config['SEED'])
+ROTATE = config['ROTATE']
+TRANSLATE = config['TRANSLATE']
+REFLECT = config['REFLECT']
+TRANSFORMATION_SEED = int(config['TRANSFORMATION_SEED'])
+SAVE_VISUALIZATION = config['SAVE_VISUALIZATION']
+M = int(config['M'])
+NUM_SAMPLES = int(config['NUM_SAMPLES'])
+PARALLEL_STEPS = int(config['PARALLEL_STEPS'])
 
-
-print("seed is: ", SEED)
+print("Random seed: ", SEED)
 
 experiment_name = checkpoint.split('/')[-1].replace('.ckpt', '')
-chains_output_dir = os.path.join(chains, experiment_name, prefix, 'chains_' + P + '_seed_' + str(SEED))
-final_states_output_dir = os.path.join(chains, experiment_name, prefix, 'final_states_' + P + '_seed_' + str(SEED))
+
+transformations = []
+if ROTATE:
+    transformations.append("rotate")
+if TRANSLATE:
+    transformations.append("translate")
+if REFLECT:
+    transformations.append("reflect")
+
+transformations_str = "_".join(transformations) if transformations else "no_transform"
+chains_output_dir = os.path.join(chains, experiment_name, prefix, f'chains_hausdorff_distance_{P}_seed_{SEED}_{transformations_str}_transformation_seed_{TRANSFORMATION_SEED}_COM_addition')
+final_states_output_dir = os.path.join(chains, experiment_name, prefix, f'final_states_hausdorff_distance_{P}_seed_{SEED}_{transformations_str}_transformation_seed_{TRANSFORMATION_SEED}_COM_addition')
+
+print("Applied trasformations: ", transformations_str)
+print("Seed used for random transformations (if applied): ", TRANSFORMATION_SEED)
+
 os.makedirs(chains_output_dir, exist_ok=True)
 os.makedirs(final_states_output_dir, exist_ok=True)
 
@@ -83,9 +103,12 @@ dataloader = get_dataloader(
     # batch_size=len(model.val_dataset)
 )
 
+print("Model", model)
+print("Using anchors as context: ", model.anchors_context)
+print("Center of mass:", model.center_of_mass)
 
 
-# In[ ]:
+# In[3]:
 
 
 torch.manual_seed(SEED)
@@ -578,21 +601,18 @@ def visualize_chain_xai(
 # In[ ]:
 
 
-#@mastro
 torch.set_printoptions(threshold=float('inf'))
 
-num_samples = 30
+num_samples = NUM_SAMPLES
 sampled = 0
-#end @mastro
 start = 0
 
-SAVE_VISUALIZATION = True
 chain_with_full_fragments = None
-M = config["M"] #100 #number of Monte Carlo Sampling steps
-# P = None #probability of atom to exist in random graph (also edge in the future)
-PARALLEL_STEPS = 100
+
 # Create the folder if it does not exist
-folder_save_path = "results/explanations_" + P + "_seed_" + str(SEED)
+
+folder_save_path = f"results/shapley_values/explanations_hausdorff_distance_{P}_seed_{SEED}_{transformations_str}_transformation_seed_{TRANSFORMATION_SEED}_COM_addition"
+
 if not os.path.exists(folder_save_path):
     os.makedirs(folder_save_path)
 
@@ -606,61 +626,28 @@ for data in dataloader:
 #determine max numebr of atoms of the molecules in the dataset. This is used to determine the size of the random noise, which we want to be equal for all molecules -> atoms not present in the molecule will be discarded using masks 
 max_num_atoms = max(data["positions"].shape[1] for data in data_list)
 
-# Pad all elements in data_list to have the same number of atoms
-# for i, data in enumerate(data_list):
-#     num_atoms_to_stack = max_num_atoms - data["positions"].shape[1]
-    
-#     # Pad positions
-#     padding = torch.zeros(data["positions"].shape[0], num_atoms_to_stack, data["positions"].shape[2]).to(device)
-#     data_list[i]["positions"] = torch.cat((data["positions"], padding), dim=1)
-    
-#     # Pad one_hot
-#     padding = torch.zeros(data["one_hot"].shape[0], num_atoms_to_stack, data["one_hot"].shape[2]).to(device)
-#     data_list[i]["one_hot"] = torch.cat((data["one_hot"], padding), dim=1)
-    
-#     # Pad charges
-#     padding = torch.zeros(data["charges"].shape[0], num_atoms_to_stack, data["charges"].shape[2]).to(device)
-#     data_list[i]["charges"] = torch.cat((data["charges"], padding), dim=1)
-    
-#     # Pad anchors
-#     padding = torch.zeros(data["anchors"].shape[0], num_atoms_to_stack, data["anchors"].shape[2]).to(device)
-#     data_list[i]["anchors"] = torch.cat((data["anchors"], padding), dim=1)
-    
-#     # Pad fragment_mask
-#     padding = torch.zeros(data["fragment_mask"].shape[0], num_atoms_to_stack, data["fragment_mask"].shape[2]).to(device)
-#     data_list[i]["fragment_mask"] = torch.cat((data["fragment_mask"], padding), dim=1)
-    
-#     # Pad linker_mask
-#     padding = torch.zeros(data["linker_mask"].shape[0], num_atoms_to_stack, data["linker_mask"].shape[2]).to(device)
-#     data_list[i]["linker_mask"] = torch.cat((data["linker_mask"], padding), dim=1)
-    
-#     # Pad atom_mask
-#     padding = torch.zeros(data["atom_mask"].shape[0], num_atoms_to_stack, data["atom_mask"].shape[2]).to(device)
-#     data_list[i]["atom_mask"] = torch.cat((data["atom_mask"], padding), dim=1)
 
-#define initial random noise for positions and features #shape = [1, max_num_atoms, 3] for positions and [1, max_num_atoms, 8] for features. 1 since batch size is 1 for our explaination task
 pos_size = (data_list[0]["positions"].shape[0], max_num_atoms, data_list[0]["positions"].shape[2])
 feature_size = (data_list[0]["one_hot"].shape[0], max_num_atoms, data_list[0]["one_hot"].shape[2])
 
-INTIAL_DISTIBUTION_PATH = "results/explanations_" + P + "_seed_" + str(SEED)
+INTIAL_DISTIBUTION_PATH = "initial_distributions/seed_" + str(SEED)
 noisy_features = None
 noisy_positions = None
 #check if the initial distribution of the noisy features and positions already exists, if not create it
 if os.path.exists(INTIAL_DISTIBUTION_PATH + "/noisy_features_seed_" + str(SEED) + ".pt"):
     # load initial distrubution of noisy features and positions
+    print("Loading initial distribution of noisy features and positions.")
     noisy_features = torch.load(INTIAL_DISTIBUTION_PATH + "/noisy_features_seed_" + str(SEED) + ".pt", map_location=device, weights_only=True)
     noisy_positions = torch.load(INTIAL_DISTIBUTION_PATH + "/noisy_positions_seed_" + str(SEED) + ".pt", map_location=device, weights_only=True)
 
 else:
+    print("Creating initial distribution of noisy features and positions.")
     noisy_positions = torch.randn(pos_size, device=device)
     noisy_features = torch.randn(feature_size, device=device)
 
-    # print("Noisy positions size:", pos_size)
-    # print("Noisy features size:", feature_size)
-    # print("Noisy positions:", noisy_positions)
-    # print("Noisy features:", noisy_features)
 
     #save the noisy positions and features on file .txt
+    print("Saving noisy features and positions to .txt and .pt files.")
     noisy_positions_file = os.path.join(folder_save_path, "noisy_positions_seed_" + str(SEED) + ".txt")
     noisy_features_file = os.path.join(folder_save_path, "noisy_features_seed_" + str(SEED) + ".txt")
 
@@ -713,13 +700,49 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
                 raise ValueError("P must be either 'graph_density', 'node_density', 'node_edge_ratio', 'edge_node_ratio' or a float value.")
         
 
-        print("Using P:", P, P)
+        print("Using P:", P)
 
         chain_with_full_fragments = None
        
         rng = default_rng(seed = SEED)
         rng_torch = torch.Generator(device="cpu")
         rng_torch.manual_seed(SEED)
+
+        #apply E(3) trasformations to the molecule. Linker atoms will be tranformed, too, but their transformations will be discarded in liue of the noisy positions
+        # print("Positions before transformations:", data["positions"])
+        transform_rng = None
+        if transformations:
+            transform_rng = default_rng(seed = TRANSFORMATION_SEED)
+            
+        if ROTATE:
+            #rotate molecule
+            # Generate a random 3x3 matrix
+            random_matrix = torch.tensor(transform_rng.uniform(-1, 1, (3, 3)), device=device, dtype=torch.float32)
+            
+            # Perform QR decomposition to obtain an orthogonal matrix
+            q, r = torch.linalg.qr(random_matrix)
+            
+            # Ensure the determinant is 1 (if not, adjust it)
+            if torch.det(q) < 0:
+                q[:, 0] = -q[:, 0]
+            
+            #ensure q has float values
+            # q = q.float()
+            # Apply the rotation matrix to the molecule positions
+            data["positions"] = torch.matmul(data["positions"], q)
+        if TRANSLATE:
+            #translate molecule
+            translation_vector = torch.tensor(transform_rng.uniform(-1, 1, (1, 3)), device=device, dtype=torch.float32)
+            data["positions"] = data["positions"] + translation_vector
+        if REFLECT:
+            #reflect molecule acrpss the xy plane
+            reflection_matrix = torch.tensor([[1.0, 0.0, 0.0],
+                                      [0.0, 1.0, 0.0],
+                                      [0.0, 0.0, -1.0]], device=device)
+            data["positions"] = torch.matmul(data["positions"], reflection_matrix)
+            
+
+        # print("Positions after transformations:", data["positions"])
         # generate chain with original and full fragments
         
         #filter the noisy positions and features to have the same size as the data, removing the atoms not actually present in the molecule
@@ -731,7 +754,8 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
         noisy_features_present_atoms = noisy_features_present_atoms[:, :data["one_hot"].shape[1], :]
 
         # print("Filtered noisy positions:", noisy_positions_present_atoms)
-        # print("Filtered noisy features:", noisy_positions_present_atoms)
+        # print("Filtered noisy features:", noisy_positions_present_atoms)    
+
         chain_batch, node_mask = model.sample_chain(data, keep_frames=keep_frames, noisy_positions=noisy_positions_present_atoms, noisy_features=noisy_features_present_atoms)
         
         #get the generated molecule and store it in a variable
@@ -742,6 +766,21 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
         # print("Similarity between the two chains:", mol_similarity.item())
         # #compute molecular distance using batches
         original_linker_mask_batch = data["linker_mask"][0].squeeze().repeat(PARALLEL_STEPS, 1) #check why it works
+        
+        original_positions = data["positions"][0]
+        chain_positions = chain_with_full_fragments[0, :, :3]
+        # print("Original positions: ", original_positions)
+        # print("Chain positions: ", chain_positions)
+
+        position_differences = original_positions - chain_positions
+        position_differences = position_differences[data["fragment_mask"].squeeze().bool()][0]
+        # print("Position differences: ", position_differences)
+        chain_with_full_fragments[:, :, :3] = chain_with_full_fragments[:, :, :3] + position_differences
+        # print("Chain with full fragments after adding position differences: ", chain_with_full_fragments)
+
+        #adding offset to the rest of the frames
+        for i in range(1, keep_frames):
+            chain_batch[i, :, :, :3] = chain_batch[i, :, :, :3] + position_differences
         
         # mol_distance = compute_molecular_distance_batch(chain_with_full_fragments, chain_with_full_fragments, mask1=original_linker_mask_batch, mask2=original_linker_mask_batch)
         # print("Molecular distance using batches: ", mol_distance)
@@ -793,9 +832,9 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
                 num_fragment_atoms = len(fragment_indices)
                 fragment_indices = fragment_indices.repeat(PARALLEL_STEPS).to(device)
 
-                data_j_plus = data.copy()
-                data_j_minus = data.copy()
-                data_random = data.copy()
+                # data_j_plus = data.copy()
+                # data_j_minus = data.copy()
+                # data_random = data.copy()
 
                 N_z_mask = torch.tensor(np.array([rng.binomial(1, P, size = num_fragment_atoms) for _ in range(PARALLEL_STEPS)]), dtype=torch.int32)
                 # Ensure at least one element is 1, otherwise randomly select one since at least one fragment atom must be present
@@ -931,9 +970,14 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
                     noisy_positions_random_dict[i] = noisy_positions_present_atoms_random[:, atom_mask_random_molecule[i], :]
 
 
-                    data_j_plus_dict[i] = data.copy()
-                    data_j_minus_dict[i] = data.copy()
-                    data_random_dict[i] = data.copy()
+                    # data_j_plus_dict[i] = data.copy()
+                    # data_j_minus_dict[i] = data.copy()
+                    # data_random_dict[i] = data.copy()
+
+                    #results should be the same but it is more conservative to deepcopy the data to avoid side effects
+                    data_j_plus_dict[i] = copy.deepcopy(data)
+                    data_j_minus_dict[i] = copy.deepcopy(data)
+                    data_random_dict[i] = copy.deepcopy(data)
 
                     #data j plus
                     data_j_plus_dict[i]["positions"] = data_j_plus_dict[i]["positions"][:, atom_mask_j_plus[i]]
@@ -1222,16 +1266,69 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
                 chain_j_plus_batch, node_mask_j_plus_batch = model.sample_chain(data_j_plus_batch, keep_frames=keep_frames, noisy_positions=noisy_positions_batch_j_plus, noisy_features=noisy_features_batch_j_plus)
 
                 chain_j_plus = chain_j_plus_batch[0, :, :, :] #it should take the first frame and all batch elements -> check it is really the first frame (I need the one at t0, the final generated molecule)
+                j_plus_original_positions = data_j_plus_batch["positions"].clone()
+
+                chain_j_plus_positions = chain_j_plus[:, :, :3]
+                position_differences_j_plus = j_plus_original_positions - chain_j_plus_positions
                 
 
+                fragment_and_linker_mask = data_j_plus_batch["fragment_mask"].squeeze().bool() | data_j_plus_batch["linker_mask"].squeeze().bool()
+                
+                position_differences_j_plus_to_use = torch.zeros((PARALLEL_STEPS, 3), device=device)
+                for step in range(PARALLEL_STEPS):
+                    position_differences_j_plus_to_use[step, :] = position_differences_j_plus[step][data_j_plus_batch["fragment_mask"].squeeze().bool()[step]][0, :]
+                
+                
+                for step in range(PARALLEL_STEPS):
+                    chain_j_plus[step, fragment_and_linker_mask[step], :3] = chain_j_plus[step, fragment_and_linker_mask[step], :3] + position_differences_j_plus_to_use[step]
+                
+                # print("chain j plus after COM addition", chain_j_plus)
+                # print("chain j plus after COM addition shape", chain_j_plus.shape)
                 chain_j_minus_batch, node_mask_j_minus_batch = model.sample_chain(data_j_minus_batch, keep_frames=keep_frames, noisy_positions=noisy_positions_batch_j_minus, noisy_features=noisy_features_batch_j_minus)
 
                 chain_j_minus = chain_j_minus_batch[0, :, :, :]
 
+                j_minus_original_positions = data_j_minus_batch["positions"].clone()
+
+                chain_j_minus_positions = chain_j_minus[:, :, :3]
+                position_differences_j_minus = j_minus_original_positions - chain_j_minus_positions
+                
+
+                fragment_and_linker_mask = data_j_minus_batch["fragment_mask"].squeeze().bool() | data_j_minus_batch["linker_mask"].squeeze().bool()
+                
+                position_differences_j_minus_to_use = torch.zeros((PARALLEL_STEPS, 3), device=device)
+                for step in range(PARALLEL_STEPS):
+                    position_differences_j_minus_to_use[step, :] = position_differences_j_minus[step][data_j_minus_batch["fragment_mask"].squeeze().bool()[step]][0, :]
+                
+                
+                for step in range(PARALLEL_STEPS):
+                    chain_j_minus[step, fragment_and_linker_mask[step], :3] = chain_j_minus[step, fragment_and_linker_mask[step], :3] + position_differences_j_minus_to_use[step]
+
+                # print("chain j minus after COM addition", chain_j_minus)
+                # print("chain j minus after COM addition shape", chain_j_minus.shape)
+
                 chain_random_batch, node_mask_random_batch = model.sample_chain(data_random_batch, keep_frames=keep_frames, noisy_positions=noisy_positions_batch_random, noisy_features=noisy_features_batch_random)
 
                 chain_random = chain_random_batch[0, :, :, :]
+
+                random_original_positions = data_random_batch["positions"].clone()
+
+                chain_random_positions = chain_random[:, :, :3]
+                position_differences_random = random_original_positions - chain_random_positions
                 
+
+                fragment_and_linker_mask = data_random_batch["fragment_mask"].squeeze().bool() | data_random_batch["linker_mask"].squeeze().bool()
+                
+                position_differences_random_to_use = torch.zeros((PARALLEL_STEPS, 3), device=device)
+                for step in range(PARALLEL_STEPS):
+                    position_differences_random_to_use[step, :] = position_differences_random[step][data_random_batch["fragment_mask"].squeeze().bool()[step]][0, :]
+                
+                
+                for step in range(PARALLEL_STEPS):
+                    chain_random[step, fragment_and_linker_mask[step], :3] = chain_random[step, fragment_and_linker_mask[step], :3] + position_differences_random_to_use[step]
+                
+                # print("chain random after COM addition", chain_random)
+                # print("chain random after COM addition shape", chain_random.shape)
                 # end_time = time.time()
                 # print("Time to sample chains in seconds:", end_time - start_time)
 
@@ -1239,55 +1336,55 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
 
                 chain_with_full_fragments_batch = chain_with_full_fragments.repeat(PARALLEL_STEPS, 1, 1)
 
+
+                
+                # V_j_plus_distance_batch = compute_molecular_distance_batch(chain_with_full_fragments_batch, chain_j_plus, mask1=original_linker_mask_batch, mask2=data_j_plus_batch["linker_mask"].squeeze())
+                
+                
+                # V_j_plus_distance = torch.sum(V_j_plus_distance_batch).item()
                 
 
-                V_j_plus_distance_batch = compute_molecular_distance_batch(chain_with_full_fragments_batch, chain_j_plus, mask1=original_linker_mask_batch, mask2=data_j_plus_batch["linker_mask"].squeeze())
-                
-                
-                V_j_plus_distance = torch.sum(V_j_plus_distance_batch).item()
-                
+                # V_j_plus_cosine_similarity_batch = compute_cosine_similarity_batch(chain_with_full_fragments_batch.cpu(), chain_j_plus.cpu(), mask1=original_linker_mask_batch.cpu(), mask2=data_j_plus_batch["linker_mask"].squeeze().cpu())
 
-                V_j_plus_cosine_similarity_batch = compute_cosine_similarity_batch(chain_with_full_fragments_batch.cpu(), chain_j_plus.cpu(), mask1=original_linker_mask_batch.cpu(), mask2=data_j_plus_batch["linker_mask"].squeeze().cpu())
-
-                V_j_plus_cosine_similarity = sum(V_j_plus_cosine_similarity_batch)
+                # V_j_plus_cosine_similarity = sum(V_j_plus_cosine_similarity_batch)
                 
                 V_j_plus_hausdorff_batch = compute_hausdorff_distance_batch(chain_with_full_fragments_batch.cpu(), chain_j_plus.cpu(), mask1=original_linker_mask_batch.cpu(), mask2=data_j_plus_batch["linker_mask"].squeeze().cpu())
                 
                 V_j_plus_hausdorff = sum(V_j_plus_hausdorff_batch)
 
-                V_j_minus_distance_batch = compute_molecular_distance_batch(chain_with_full_fragments_batch, chain_j_minus, mask1=original_linker_mask_batch, mask2=data_j_minus_batch["linker_mask"].squeeze())
+                # V_j_minus_distance_batch = compute_molecular_distance_batch(chain_with_full_fragments_batch, chain_j_minus, mask1=original_linker_mask_batch, mask2=data_j_minus_batch["linker_mask"].squeeze())
 
-                V_j_minus_distance = torch.sum(V_j_minus_distance_batch).item()
+                # V_j_minus_distance = torch.sum(V_j_minus_distance_batch).item()
                 
                 
-                V_j_minus_cosine_similarity_batch = compute_cosine_similarity_batch(chain_with_full_fragments_batch.cpu(), chain_j_minus.cpu(), mask1=original_linker_mask_batch.cpu(), mask2=data_j_minus_batch["linker_mask"].squeeze().cpu())
+                # V_j_minus_cosine_similarity_batch = compute_cosine_similarity_batch(chain_with_full_fragments_batch.cpu(), chain_j_minus.cpu(), mask1=original_linker_mask_batch.cpu(), mask2=data_j_minus_batch["linker_mask"].squeeze().cpu())
 
-                V_j_minus_cosine_similarity = sum(V_j_minus_cosine_similarity_batch)
+                # V_j_minus_cosine_similarity = sum(V_j_minus_cosine_similarity_batch)
 
                 V_j_minus_hausdorff_batch = compute_hausdorff_distance_batch(chain_with_full_fragments_batch.cpu(), chain_j_minus.cpu(), mask1=original_linker_mask_batch.cpu(), mask2=data_j_minus_batch["linker_mask"].squeeze().cpu())
 
                 V_j_minus_hausdorff = sum(V_j_minus_hausdorff_batch)
 
-                V_random_distance_batch = compute_molecular_distance_batch(chain_with_full_fragments_batch, chain_random, mask1=original_linker_mask_batch, mask2=data_random_batch["linker_mask"].squeeze())
+                # V_random_distance_batch = compute_molecular_distance_batch(chain_with_full_fragments_batch, chain_random, mask1=original_linker_mask_batch, mask2=data_random_batch["linker_mask"].squeeze())
                 
 
-                V_random_cosine_similarity = compute_cosine_similarity_batch(chain_with_full_fragments_batch.cpu(), chain_random.cpu(), mask1=original_linker_mask_batch.cpu(), mask2=data_random_batch["linker_mask"].squeeze().cpu())
+                # V_random_cosine_similarity = compute_cosine_similarity_batch(chain_with_full_fragments_batch.cpu(), chain_random.cpu(), mask1=original_linker_mask_batch.cpu(), mask2=data_random_batch["linker_mask"].squeeze().cpu())
 
                 V_random_hausdorff_batch = compute_hausdorff_distance_batch(chain_with_full_fragments_batch.cpu(), chain_random.cpu(), mask1=original_linker_mask_batch.cpu(), mask2=data_random_batch["linker_mask"].squeeze().cpu())
 
-                for r_dist in V_random_distance_batch:
-                    distances_random_samples.append(r_dist.item())
+                # for r_dist in V_random_distance_batch:
+                #     distances_random_samples.append(r_dist.item())
                 
-                for r_cos in V_random_cosine_similarity:
-                    cosine_similarities_random_samples.append(r_cos)
+                # for r_cos in V_random_cosine_similarity:
+                #     cosine_similarities_random_samples.append(r_cos)
 
                 for r_haus in V_random_hausdorff_batch:
                     hausdorff_distances_random_samples.append(r_haus)
                 
                 
-                marginal_contrib_distance += (V_j_plus_distance - V_j_minus_distance)
+                # marginal_contrib_distance += (V_j_plus_distance - V_j_minus_distance)
 
-                marginal_contrib_cosine_similarity += (V_j_plus_cosine_similarity - V_j_minus_cosine_similarity)
+                # marginal_contrib_cosine_similarity += (V_j_plus_cosine_similarity - V_j_minus_cosine_similarity)
 
                 marginal_contrib_hausdorff += (V_j_plus_hausdorff - V_j_minus_hausdorff)
 
@@ -1295,47 +1392,47 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
                 # print("Time to compute V_j_plus, V_j_minus, V_random, and the marginal contribution in seconds:", end_time - start_time)
                 
 
-            phi_atoms[fragment_indices[j].item()] = [0,0,0]    
-            phi_atoms[fragment_indices[j].item()][0] = marginal_contrib_distance/M #j is the index of the fragment atom in the fragment indices tensor
-            phi_atoms[fragment_indices[j].item()][1] = marginal_contrib_cosine_similarity/M
-            phi_atoms[fragment_indices[j].item()][2] = marginal_contrib_hausdorff/M
+            phi_atoms[fragment_indices[j].item()] = [0]    
+            # phi_atoms[fragment_indices[j].item()][0] = marginal_contrib_distance/M #j is the index of the fragment atom in the fragment indices tensor
+            # phi_atoms[fragment_indices[j].item()][1] = marginal_contrib_cosine_similarity/M
+            phi_atoms[fragment_indices[j].item()][0] = marginal_contrib_hausdorff/M
 
         print(data["name"])
 
-        phi_atoms_distances = {}
-        phi_atoms_cosine_similarity = {}
+        # phi_atoms_distances = {}
+        # phi_atoms_cosine_similarity = {}
         phi_atoms_hausdorff = {}
         for atom_index, phi_values in phi_atoms.items():
-            phi_atoms_distances[atom_index] = phi_values[0]
-            phi_atoms_cosine_similarity[atom_index] = phi_values[1]
-            phi_atoms_hausdorff[atom_index] = phi_values[2]
+            # phi_atoms_distances[atom_index] = phi_values[0]
+            # phi_atoms_cosine_similarity[atom_index] = phi_values[1]
+            phi_atoms_hausdorff[atom_index] = phi_values[0]
 
         
         # Save phi_atoms to a text file
         with open(f'{folder_save_path}/phi_atoms_{data_index}.txt', 'w') as write_file:
             write_file.write("sample name: " + str(data["name"]) + "\n")
-            write_file.write("atom_index,distance,cosine_similarity,hausdorff\n")
+            write_file.write("atom_index,shapley_value\n")
             for atom_index, phi_values in phi_atoms.items():
-                write_file.write(f"{atom_index},{phi_values[0]},{phi_values[1]}, {phi_values[2]}\n")
+                write_file.write(f"{atom_index},{phi_values[0]}\n")
 
             write_file.write("\n")
             # save sum of phi values for disance and cosine similarity
-            write_file.write("Sum of phi values for distance\n")
-            write_file.write(str(sum([p_values[0] for p_values in phi_atoms.values()])) + "\n")
-            write_file.write("Sum of phi values for cosine similarity\n")
-            write_file.write(str(sum([p_values[1] for p_values in phi_atoms.values()])) + "\n")
+            # write_file.write("Sum of phi values for distance\n")
+            # write_file.write(str(sum([p_values[0] for p_values in phi_atoms.values()])) + "\n")
+            # write_file.write("Sum of phi values for cosine similarity\n")
+            # write_file.write(str(sum([p_values[1] for p_values in phi_atoms.values()])) + "\n")
             write_file.write("Sum of phi values for hausdorff\n")
-            write_file.write(str(sum([p_values[2] for p_values in phi_atoms.values()])) + "\n")     
-            write_file.write("Average distance random samples:\n")
-            write_file.write(str(sum(distances_random_samples)/len(distances_random_samples)) + "\n")
-            write_file.write("Average cosine similarity random samples:\n")
-            write_file.write(str(sum(cosine_similarities_random_samples)/len(cosine_similarities_random_samples)) + "\n")
+            write_file.write(str(sum([p_values[0] for p_values in phi_atoms.values()])) + "\n")     
+            # write_file.write("Average distance random samples:\n")
+            # write_file.write(str(sum(distances_random_samples)/len(distances_random_samples)) + "\n")
+            # write_file.write("Average cosine similarity random samples:\n")
+            # write_file.write(str(sum(cosine_similarities_random_samples)/len(cosine_similarities_random_samples)) + "\n")
             write_file.write("Average hausdorff distance random samples:\n")
             write_file.write(str(sum(hausdorff_distances_random_samples)/len(hausdorff_distances_random_samples)) + "\n")      
-            write_file.write("Distances random samples\n")
-            write_file.write(str(distances_random_samples) + "\n")
-            write_file.write("Cosines similarity random samples\n")
-            write_file.write(str(cosine_similarities_random_samples) + "\n")
+            # write_file.write("Distances random samples\n")
+            # write_file.write(str(distances_random_samples) + "\n")
+            # write_file.write("Cosines similarity random samples\n")
+            # write_file.write(str(cosine_similarities_random_samples) + "\n")
             write_file.write("Hausdorff distances random samples\n")
             write_file.write(str(hausdorff_distances_random_samples) + "\n")
 
@@ -1427,7 +1524,7 @@ for data_index, data in enumerate(tqdm(data_list)): #7:
 
 # ### Save initial distrubiution without re-explaining (loading Shapley values from file)
 
-# In[ ]:
+# In[7]:
 
 
 # phi_values_for_viz = phi_atoms_hausdorff

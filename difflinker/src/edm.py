@@ -217,6 +217,7 @@ class EDM(torch.nn.Module):
         
         x_original, h_original, = self.normalize(x_original, h_original)
         xh_original = torch.cat([x_original, h_original], dim=2)
+
         # Sampling initial noise @mastro if noisy_positions and noisy_features are not None, they are used to sample the initial noise
         z = self.sample_combined_position_feature_noise(n_samples, n_nodes, mask=linker_mask, noisy_positions = noisy_positions, noisy_features = noisy_features)
         z = xh * fragment_mask + z * linker_mask
@@ -240,7 +241,7 @@ class EDM(torch.nn.Module):
             t_array = s_array + 1
             s_array = s_array / self.T
             t_array = t_array / self.T
-
+            
             z = self.sample_p_zs_given_zt_only_linker(
                 s=s_array,
                 t=t_array,
@@ -257,24 +258,37 @@ class EDM(torch.nn.Module):
             # write_index = (s * (self.T - injection_frame)) // (self.T - injection_frame) #check if correct
             chain_before_injection[write_index] = self.unnormalize_z(z) #we would need to pad the chain to read the dimension of original data
 
+        x, h = self.sample_p_xh_given_z0_only_linker(
+            z_0=z,
+            node_mask=node_mask,
+            fragment_mask=fragment_mask,
+            linker_mask=linker_mask,
+            edge_mask=edge_mask,
+            context=context,
+        )
+        x, h = self.normalize(x, h)
+        z = torch.cat([x, h], dim=2)
         #we need a new z which is the same as z_original but that will keep its elements at the indices it has
 
         # Ensure z contains the same number of elements as atom_indices_kept
         assert z.size(1) == len(atom_indices_kept), "z must contain the same number of elements as atom_indices_kept"
 
+        # print("Z after sampling loop: ", z)
+        # print("Z_original before modification: ", z_original)
         # Modify z_original to keep elements from z at positions specified by atom_indices_kept
         for i, idx in enumerate(atom_indices_kept):
             z_original[:, idx, :] = z[:, i, :]
 
-        
+        # print("Z_original after modification: ", z_original)
         #from here on, original data should be used
         # this is the chain after atom injection
+        
         for s in reversed(range(0, self.T - injection_step)):
             s_array = torch.full((n_samples_original, 1), fill_value=s, device=z_original.device)
             t_array = s_array + 1
             s_array = s_array / self.T
             t_array = t_array / self.T
-
+            
             z_original = self.sample_p_zs_given_zt_only_linker(
                 s=s_array,
                 t=t_array,

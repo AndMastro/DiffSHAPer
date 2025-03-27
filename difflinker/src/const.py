@@ -144,6 +144,13 @@ BONDS_3 = {
     'O': {'C': 113}
 }
 
+BONDS_AROMATIC = {
+    "C": {"C": 139, "N": 134, "O": 136, "S": 174},  # Typical aromatic bond length for C-C in benzene (times 100)
+    "N": {"C": 134},  # Example for aromatic C-N bond (times 100)
+    "O": {"C": 136},  # Example for aromatic C-O bond (times 100)
+    "S": {"C": 174},  # Example for aromatic C-S bond (times 100)
+}
+
 BOND_DICT = [
     None,
     Chem.rdchem.BondType.SINGLE,
@@ -178,7 +185,7 @@ ALLOWED_BONDS = {
     'Bi': [3, 5]
 }
 
-MARGINS_EDM = [10, 5, 2]
+MARGINS_EDM = [10, 5, 2, 7] # in Angstroms added 7 for aromatic
 
 # COLORS = ['C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8'] #orginal difflinker colors
 # COLORS = ['#808080', '#FF0000', '#0000FF', '#00FF00', '#FFFF00', '#00FF00', '#A52A2A', '#9400D3', '#FFA500'] #standard molecule colors

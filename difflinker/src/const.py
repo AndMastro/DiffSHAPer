@@ -180,7 +180,9 @@ ALLOWED_BONDS = {
 
 MARGINS_EDM = [10, 5, 2]
 
-COLORS = ['C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8']
+# COLORS = ['C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8'] #orginal difflinker colors
+# COLORS = ['#808080', '#FF0000', '#0000FF', '#00FF00', '#FFFF00', '#00FF00', '#A52A2A', '#9400D3', '#FFA500'] #standard molecule colors
+COLORS = ['#696969', '#CC0000', '#0000CC', '#00CC00', '#CCCC00', '#00CC00', '#8B0000', '#800080', '#CC8400']
 # RADII = [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3]
 RADII = [0.77, 0.77, 0.77, 0.77, 0.77, 0.77, 0.77, 0.77, 0.77]
 

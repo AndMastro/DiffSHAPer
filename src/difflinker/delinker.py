@@ -3,8 +3,8 @@ import numpy as np
 
 from rdkit import Chem
 from rdkit.Chem import MolStandardize
-from src import metrics
-from src.delinker_utils import sascorer, calc_SC_RDKit
+from src.difflinker import metrics
+from src.difflinker.delinker_utils import sascorer, calc_SC_RDKit
 from tqdm import tqdm
 
 from pdb import set_trace

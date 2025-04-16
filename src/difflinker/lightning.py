@@ -4,21 +4,21 @@ import pytorch_lightning as pl
 import torch
 import wandb
 
-from src import metrics, utils, delinker
-from src.const import LINKER_SIZE_DIST
-from src.egnn import Dynamics, DynamicsWithPockets
-from src.edm import EDM, InpaintingEDM
-from src.datasets import (
+from src.difflinker import metrics, utils, delinker
+from src.difflinker.const import LINKER_SIZE_DIST
+from src.difflinker.egnn import Dynamics, DynamicsWithPockets
+from src.difflinker.edm import EDM, InpaintingEDM
+from src.difflinker.datasets import (
     ZincDataset, MOADDataset, create_templates_for_linker_generation, get_dataloader, collate
 )
-from src.linker_size import DistributionNodes
-from src.molecule_builder import build_molecules
-from src.visualizer import save_xyz_file, visualize_chain
+from src.difflinker.linker_size import DistributionNodes
+from src.difflinker.molecule_builder import build_molecules
+from src.difflinker.visualizer import save_xyz_file, visualize_chain
 from typing import Dict, List, Optional
 from tqdm import tqdm
 
 from pdb import set_trace
-from src import const
+from src.difflinker import const
 #get running device from const file
 running_device = const.RUNNING_DEVICE
 

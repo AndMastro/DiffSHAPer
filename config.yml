@@ -1,21 +1,22 @@
-CHECKPOINT: "models/zinc_difflinker.ckpt"
-CHAINS: "trajectories"
-DATA: "datasets"
-PREFIX: "zinc_final_test"
-KEEP_FRAMES: 30
+CHECKPOINT: "models/zinc_difflinker.ckpt" #model checkpoint to load
+SAVE_FOLDER: "results/explanations" #folder to save the explanations
+DATA_FOLDER: "datasets"
+DATASET_NAME: "zinc_final_test"
+KEEP_FRAMES: 10 #number of frames to save from the generation process
 P: "0.5" #can be a float values (passed as a string), node_density, edge_density, edge_node_ratio, or node_edge_ratio 
-SEED: 42 #seed for the general random number generator
-DEVICE: "cuda:7"
-NUM_SAMPLES: 30 #number of samples to explain
-SAVE_VISUALIZATION: True
-PARALLEL_STEPS: 100
+SEED: 42 #seed for the general random number generators
+DEVICE: "cuda:0" #device to use for the model, can be "cuda:x" or "cpu"
+NUM_SAMPLES: 30 #number of samples to explain for the current run
+SAVE_VISUALIZATION: True #True to save the visualization of the explanations, False to not save them
+LOAD_INITIAL_DISTRIBUTION: True #True to load the initial distribution for the linker atoms, False to randomly generate it according to the set SEED. initial distrubutions available for seeds 42, 1240, 14085. Newly generated distributions are saved in the folder datasets/initial_distributions
 M: 100 #number of Monte Carlo sampling steps for Shapley values approximation
-REMOVAL: True #True to have atom removal strategy for ablation study, False to have addition strategy
+PARALLEL_STEPS: 100 #number of parallel steps for the Monte Calro sampling
+REMOVAL: False #True to have atom removal strategy for ablation study, False to have addition strategy
 ATOM_PERTURBATION: False #True to have atom perturbation strategy for analysis purposes, False to have no atom perturbation (it has no effect on explanation scripts)
 DIAGONALIZE: False #True to have diagonalized Coulomb, False to have standard Coulomb matrix
 ROTATE: False #True to have rotation of the molecule, False to have no rotation
 TRANSLATE: False #True to have translation of the molecule, False to have no translation
 REFLECT: False #True to have reflection of the molecule, False to have no reflection
 TRANSFORMATION_SEED: 42 #seed for random transformation
-TOP_K_PERTURBATION_REMOVAL: True
-LOCAL_MINIMUM_ANALYSIS: True #True to have local minimum analysis, False to have only atom removal with no re-addition
+TOP_K_PERTURBATION_REMOVAL: False
+LOCAL_MINIMUM_ANALYSIS: False #True to have local minimum analysis, False to have only atom removal with no re-addition

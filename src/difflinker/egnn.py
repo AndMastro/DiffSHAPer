@@ -3,10 +3,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from src import utils
+from src.difflinker import utils
 from pdb import set_trace
 import os
-from src import const
+from src.difflinker import const
 #get running device from const file
 running_device = const.RUNNING_DEVICE
 

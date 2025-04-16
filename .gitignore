@@ -161,5 +161,7 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-difflinker/results
-difflinker/trajectories/
+src/difflinker/results_development/
+src/difflinker/trajectories/
+temp/
+results/

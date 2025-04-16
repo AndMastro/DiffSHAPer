@@ -3,7 +3,7 @@ import torch.nn.functional as F
 import math
 import numpy as np
 import os
-from src import const
+from src.difflinker import const
 #get running device from const file
 running_device = const.RUNNING_DEVICE
 

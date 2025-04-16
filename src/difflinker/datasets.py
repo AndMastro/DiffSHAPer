@@ -7,8 +7,8 @@ import torch
 from rdkit import Chem
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
-from src import const
-from src import const
+from src.difflinker import const
+
 #get running device from const file
 running_device = const.RUNNING_DEVICE
 

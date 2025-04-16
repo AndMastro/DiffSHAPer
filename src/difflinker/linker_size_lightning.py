@@ -1,15 +1,15 @@
 import pytorch_lightning as pl
 import torch
 
-from src.const import ZINC_TRAIN_LINKER_ID2SIZE, ZINC_TRAIN_LINKER_SIZE2ID
-from src.linker_size import SizeGNN
-from src.egnn import coord2diff
-from src.datasets import ZincDataset, get_dataloader, collate_with_fragment_edges
+from src.difflinker.const import ZINC_TRAIN_LINKER_ID2SIZE, ZINC_TRAIN_LINKER_SIZE2ID
+from src.difflinker.linker_size import SizeGNN
+from src.difflinker.egnn import coord2diff
+from src.difflinker.datasets import ZincDataset, get_dataloader, collate_with_fragment_edges
 from typing import Dict, List, Optional
 from torch.nn.functional import cross_entropy, mse_loss, sigmoid
 
 from pdb import set_trace
-from src import const
+from src.difflinker import const
 #get running device from const file
 running_device = const.RUNNING_DEVICE
 

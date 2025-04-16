@@ -3,13 +3,13 @@ import torch.nn.functional as F
 import numpy as np
 import math
 
-from src import utils
-from src.egnn import Dynamics
-from src.noise import GammaNetwork, PredefinedNoiseSchedule
+from src.difflinker import utils
+from src.difflinker.egnn import Dynamics
+from src.difflinker.noise import GammaNetwork, PredefinedNoiseSchedule
 from typing import Union
 
 from pdb import set_trace
-from src import const
+from src.difflinker import const
 #get running device from const file
 running_device = const.RUNNING_DEVICE
 

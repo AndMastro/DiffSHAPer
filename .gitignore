@@ -164,4 +164,3 @@ cython_debug/
 src/difflinker/results_development/
 src/difflinker/trajectories/
 temp/
-results/

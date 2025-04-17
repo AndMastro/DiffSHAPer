@@ -20,9 +20,9 @@ The enrivornment file provided within the repo was generated under and Ubuntu sy
 
 ## Generate explanations
 
-The repository contains the script ```diffusion_explainer.py```. If will generate linkers using [DiffLinker](https://github.com/igashov/DiffLinker) and explain the generated molecules using our Shapley-value starategy.
+The repository contains the script ```diffusion_explainer.py```. It will generate linkers using [DiffLinker](https://github.com/igashov/DiffLinker) and explain the generated molecules using our appreach.
 
-The script will load parameters from ```config.yml```, where you can adjust several parameters as the number of smaples to explain, the generation frames for which images should be generated, Monte Carlo sampling steps for Shapley values approximation, and others.
+The script will load parameters from ```config.yml```, where you can adjust several parameters as the number of samples to explain, the generation frames for which images should be generated, Monte Carlo sampling steps for Shapley values approximation, and others.
 
 We also provide the notebook ```diffusion_explainer.ipynb``` for interactive sessions.
 

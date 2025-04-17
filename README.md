@@ -31,7 +31,7 @@ We also provide the notebook ```diffusion_explainer.ipynb``` for interactive ses
 Explanations are mapped to compounds structures, both in terms of graph representaitons and molecular graphs. The graph representation is generated inspired by visualization facilities from DiffLinker, while molecular graphs are generated using the [RDKit](https://www.rdkit.org/) library. An exemplary explanation with atom importance mapped onto molecular strucutres may look like this:
 
 <p align="center">
-  <img src="results/explanations/zinc_final_test/explanations_seed_42/mapping/structures/1/1_0_structure.png" alt="exemplary explanation mappedn onto molecular strucutres" width=45%>
+  <img src="results/explanations/zinc_final_test/explanations_seed_42/mapping/structures/8/8_0_structure.png" alt="exemplary explanation mappedn onto molecular strucutres" width=45%>
 </p>
 
 We can see fragment atoms that favor (red) the generation of the linekr (green) and atoms that oppose it (blue). Mappings and computed Shapley values will be saved in the ```results/explanations/zinc_final_test/DATASET_NAME``` folder.

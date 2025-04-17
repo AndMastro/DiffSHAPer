@@ -4,7 +4,7 @@
 
 This is the official reporitory for the work **Explaining molecular diffusion models**.
 
-We propose an explainability strategy for diffusion models showing linker desgin as a use case.
+We propose an explainability strategy based on Shapley values for diffusion models with linker desgin as a use case.
 
 ## Prerequisites
 
@@ -16,7 +16,7 @@ All the packages needed to run the code are available in environment.yml. We sug
 conda env create -f environment.yml
 ```
 
-The enrivornment file provided within the repo was generated under and Ubuntu system. It may fail on Windows systems, so we reccomend installing the needed packages separately in this case. If you have problems installing PyTorch from the environment, install following instructions [here](https://pytorch.org/get-started/locally/)
+The enrivornment file provided within the repo was generated under and Ubuntu system. It may fail on Windows systems, so we recommend installing the needed packages separately in this case. If you have problems installing PyTorch from the environment, install following instructions [here](https://pytorch.org/get-started/locally/).
 
 ## Generate explanations
 

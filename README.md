@@ -24,7 +24,7 @@ The repository contains the script ```diffusion_explainer.py```. If will generat
 
 The script will load parameters from ```config.yml```, where you can adjust several parameters as the number of smaples to explain, the generation frames for which images should be generated, Monte Carlo sampling steps for Shapley values approximation, and others.
 
-We also provide the notebook ```diffusion_explainer.ipybn``` for interactive sessions.
+We also provide the notebook ```diffusion_explainer.ipynb``` for interactive sessions.
 
 ## Inspect results
 
@@ -33,5 +33,7 @@ Explanations are mapped to compounds structures, both in terms of graph represen
 <p align="center">
   <img src="results/explanations/zinc_final_test/explanations_seed_42/mapping/structures/1/1_0_structure.png" alt="exemplary explanation mappedn onto molecular strucutres" width=45%>
 </p>
+
+Mappings and computed Shapley values will be saved in the ```results/explanations/zinc_final_test/DATASET_NAME``` folder.
 
 For any clarification, doubt, or curiosity, feel free to drop an [email](mailto:mastropietro@bit.uni-bonn.de)

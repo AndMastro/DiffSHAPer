@@ -34,6 +34,6 @@ Explanations are mapped to compounds structures, both in terms of graph represen
   <img src="results/explanations/zinc_final_test/explanations_seed_42/mapping/structures/1/1_0_structure.png" alt="exemplary explanation mappedn onto molecular strucutres" width=45%>
 </p>
 
-We can see fragment atoms that favor (red) the generation of th elinekr (green) and atoms that oppose it (blue). Mappings and computed Shapley values will be saved in the ```results/explanations/zinc_final_test/DATASET_NAME``` folder.
+We can see fragment atoms that favor (red) the generation of the linekr (green) and atoms that oppose it (blue). Mappings and computed Shapley values will be saved in the ```results/explanations/zinc_final_test/DATASET_NAME``` folder.
 
 For any clarification, doubt, or curiosity, feel free to drop an [email](mailto:mastropietro@bit.uni-bonn.de)

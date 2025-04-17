@@ -184,7 +184,8 @@ def visualize_mapping_structure(file_names, generation_folder, shapley_values, f
         
         img = Image.open("temp/temp_image.png")
         
-        # Save the image in the "structure" subfolder
+        
+        os.makedirs(save_folder, exist_ok=True)
         output_file = os.path.join(save_folder, f"{name}_structure.png")
         img.save(output_file, dpi=(300, 300))
 

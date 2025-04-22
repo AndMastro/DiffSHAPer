@@ -299,4 +299,4 @@ dependencies:
   - zstd==1.5.2=ha95c52a_0
   - pytorch-cuda=12.4
   - pytorch
-prefix: /home/mastropietro/anaconda3/envs/diffusion_explainer
+prefix: YOUR/OWN/PATH/anaconda3/envs/diffusion_explainer

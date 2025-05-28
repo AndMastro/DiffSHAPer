@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
-
-
 # Copyright (c) 2024, Andrea Mastropietro. All rights reserved.
 # This code is licensed under the MIT License.
 # See the LICENSE file in the project root for more information.
@@ -11,9 +8,6 @@
 import os
 os.environ["http_proxy"] = "http://web-proxy.informatik.uni-bonn.de:3128"
 os.environ["https_proxy"] = "http://web-proxy.informatik.uni-bonn.de:3128"
-
-
-# In[2]:
 
 
 import copy
@@ -33,8 +27,6 @@ from src.difflinker.datasets import get_dataloader
 from src.difflinker.lightning import DDPM
 from src.utils import save_xyz_file
 
-
-# In[3]:
 
 
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
@@ -81,8 +73,6 @@ else:
     shapley_values_save_path = os.path.join(SAVE_FOLDER, DATASET_NAME, f'explanations_seed_{SEED}', "shapley_values")
 os.makedirs(mapping_output_dir, exist_ok=True)
 os.makedirs(shapley_values_save_path, exist_ok=True)
-# final_states_output_dir = os.path.join(SAVE_FOLDER, DATASET_NAME, "mapping", f'final_states_hausdorff_distance_{P}_seed_{SEED}_{transformations_str}_transformation_seed_{TRANSFORMATION_SEED}')
-# os.makedirs(final_states_output_dir, exist_ok=True)
 
 if transformations:
     print("Applied trasformations: ", transformations_str)
@@ -105,8 +95,6 @@ dataloader = get_dataloader(
 )
 
 
-# In[4]:
-
 
 #set random seeds
 torch.manual_seed(SEED)
@@ -117,10 +105,6 @@ random.seed(SEED)
 
 
 # ### Explainabiliy phase
-
-# ##### Multiple sampling steps at a time
-
-# In[ ]:
 
 
 sampled = 0
@@ -772,16 +756,6 @@ for data_index, data in enumerate(tqdm(data_list)):
             for atom_index, phi_values in phi_atoms.items():
                 write_file.write(f"{atom_index},{phi_values[0]}\n")
 
-            # write_file.write("\n")
-            
-            # write_file.write("Sum of phi values for hausdorff\n")
-            # write_file.write(str(sum([p_values[0] for p_values in phi_atoms.values()])) + "\n")     
-            
-            # write_file.write("Average hausdorff distance random samples:\n")
-            # write_file.write(str(sum(hausdorff_distances_random_samples)/len(hausdorff_distances_random_samples)) + "\n")      
-            
-            # write_file.write("Hausdorff distances random samples\n")
-            # write_file.write(str(hausdorff_distances_random_samples) + "\n")
 
         if SAVE_VISUALIZATION:
             phi_values_for_viz = phi_atoms_hausdorff
@@ -839,7 +813,7 @@ for data_index, data in enumerate(tqdm(data_list)):
                     bg='white',
                     is_geom=model.is_geom,
                     fragment_mask=data['fragment_mask'][i].squeeze(),
-                    phi_values=list(phi_values_for_viz.values()) #this keeps the order as per implementarion but should be edited to be safe and guarantee the order
+                    phi_values=list(phi_values_for_viz.values()) 
                 )
 
                 mapping_output_structure = os.path.join(mapping_output_dir, "structures", name)
@@ -853,30 +827,6 @@ for data_index, data in enumerate(tqdm(data_list)):
                     save_folder = mapping_output_structure
                 )
 
-                # # Saving final prediction and ground truth separately
-                # true_one_hot = data['one_hot'][i].unsqueeze(0)
-                # true_positions = data['positions'][i].unsqueeze(0)
-                # true_node_mask = data['atom_mask'][i].unsqueeze(0)
-                # save_xyz_file(
-                #     final_states_output_dir,
-                #     true_one_hot,
-                #     true_positions,
-                #     true_node_mask,
-                #     names=[f'{name}_true'],
-                #     is_geom=model.is_geom,
-                # )
-
-                # pred_one_hot = chain[0, :, 3:-1].unsqueeze(0)
-                # pred_positions = chain[0, :, :3].unsqueeze(0)
-                # pred_node_mask = chain_node_mask[0].unsqueeze(0)
-                # save_xyz_file(
-                #     final_states_output_dir,
-                #     pred_one_hot,
-                #     pred_positions,
-                #     pred_node_mask,
-                #     names=[f'{name}_pred'],
-                #     is_geom=model.is_geom
-                # )
 
             start += len(data['positions'])
 

@@ -161,8 +161,6 @@ else:
 
 for data_index, data in enumerate(tqdm(data_list)):
 
-        # start_time = time.time()
-        
         smile = data["name"][0]
         
         mol = read_smiles(smile)
@@ -182,7 +180,7 @@ for data_index, data in enumerate(tqdm(data_list)):
         edge_node_ratio = num_edges/num_nodes
         
         if P == "graph_density":
-            P = graph_density #probability of atom to exist in random graph (not sure if correct approach, this was correct for edges)
+            P = graph_density 
         elif P == "node_density":
             P = node_density
         elif P == "node_edge_ratio" or P == "edge_node_ratio":

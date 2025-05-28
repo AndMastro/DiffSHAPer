@@ -6,7 +6,7 @@ This is the official repository for the work **Explaining molecular diffusion mo
 
 We propose an explainability strategy based on Shapley values for diffusion models with linker desgin as a use case.
 
-## Prerequisites
+## ⚙️ Prerequisites 
 
 The code was developed and testes on an Ubuntu 22.04 system with Python 3.10.5 and PyTorch 2.4.0 (CUDA version 12.4). We believe other versions and systems to be compatible as well (let us know if you try other version as we will add them to the compatibility list!).
 
@@ -18,7 +18,7 @@ conda env create -f environment.yml
 
 The enrivornment file provided within the repo was generated under Ubuntu. It may fail on Windows systems, so we recommend installing the needed packages separately in this case. If you have problems installing PyTorch from the environment, install following instructions [here](https://pytorch.org/get-started/locally/).
 
-## Generate explanations
+## 🧠 Generate explanations
 
 The repository contains the script ```diffusion_explainer.py```. It will generate linkers using [DiffLinker](https://github.com/igashov/DiffLinker) and explain the generated molecules using our approach.
 
@@ -26,7 +26,7 @@ The script will load parameters from ```config.yml```, where you can adjust seve
 
 We also provide the notebook ```diffusion_explainer.ipynb``` for interactive sessions.
 
-## Inspect results
+## 🔍 Inspect results
 
 Explanations are mapped to compounds structures, both in terms of graph representaitons and molecular graphs. The graph representation is generated inspired by visualization facilities from DiffLinker, while molecular graphs are generated using the [RDKit](https://www.rdkit.org/) library. An exemplary explanation with atom importance mapped onto molecular strucutres may look like this:
 
@@ -38,4 +38,6 @@ We can see fragment atoms that favor (red) the generation of the linekr (green) 
 
 The folder ```notebooks``` contains additional code used for analyses and experiments.
 
-For any clarification, doubt, or curiosity, feel free to drop an [email](mailto:mastropietro@bit.uni-bonn.de)
+## 📫 Contacts
+
+For any clarification, doubt, or curiosity, feel free to drop an [email](mailto:mastropietro@bit.uni-bonn.de).

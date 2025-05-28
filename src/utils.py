@@ -79,14 +79,30 @@ def compute_hausdorff_distance_batch(mol1, mol2, mask1 = None, mask2 = None):
 
     return hausdorff_distances
 
-def arrestomomentum():
-    # This function is used to intentionally (and magically 🧙‍♂️) interrupt
-    # execution for debugging purposes.
-    raise KeyboardInterrupt("Debug interrupt.")
+
 
 
 # Visualize generated molecules as molecular graphs #maybe substitute phi_values with actula colors
 def visualize_mapping_structure(file_names, generation_folder, shapley_values, fragment_mask, linker_mask, save_folder, colormap = 'coolwarm_r'):
+    """
+    Visualizes the mapping structure of generated molecules by coloring atoms and bonds according to Shapley values and fragment/linker masks, and saves the resulting images.
+    For each molecule in `file_names`, this function:
+        - Loads atom positions and types from XYZ files.
+        - Constructs an RDKit molecule object.
+        - Colors atoms based on their Shapley values (using a colormap) for fragment atoms, and in emerald green for linker atoms.
+        - Colors bonds connecting linker atoms in emerald green.
+        - Draws the molecule with highlighted atoms and bonds, and saves the image to the specified folder.
+    Args:
+        file_names (list of str): List of molecule file base names (without extension) to process.
+        generation_folder (str): Path to the folder containing generated molecule XYZ files.
+        shapley_values (list or np.ndarray): Array of Shapley values for each atom, used to color fragment atoms.
+        fragment_mask (list or np.ndarray): Binary mask indicating which atoms are part of the fragment (1 for fragment, 0 otherwise).
+        linker_mask (list or np.ndarray): Binary mask indicating which atoms are part of the linker (1 for linker, 0 otherwise).
+        save_folder (str): Path to the folder where the output images will be saved.
+        colormap (str, optional): Name of the matplotlib colormap to use for coloring fragment atoms based on Shapley values. Defaults to 'coolwarm_r'.
+    Returns:
+        None. The function saves PNG images of the visualized molecules to `save_folder`.
+    """
     
     for name in file_names:
     # Load generated molecule positions and atom types
@@ -572,3 +588,10 @@ def load_molecule_xyz(file, is_geom):
             position = torch.Tensor([float(e) for e in atom[1:]])
             positions[i, :] = position
         return positions, one_hot, charges
+    
+def arrestomomentum():
+    """
+    This function is used to intentionally (and magically 🧙‍♂️) interrupt
+    execution for debugging purposes.
+    """
+    raise KeyboardInterrupt("Debug interrupt.")

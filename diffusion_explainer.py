@@ -6,8 +6,8 @@
 # See the LICENSE file in the project root for more information.
 
 import os
-os.environ["http_proxy"] = "http://web-proxy.informatik.uni-bonn.de:3128"
-os.environ["https_proxy"] = "http://web-proxy.informatik.uni-bonn.de:3128"
+# os.environ["http_proxy"] = "http://web-proxy.informatik.uni-bonn.de:3128"
+# os.environ["https_proxy"] = "http://web-proxy.informatik.uni-bonn.de:3128"
 
 
 import copy
@@ -26,7 +26,6 @@ from src.utils import compute_hausdorff_distance_batch, visualize_mapping_graph,
 from src.difflinker.datasets import get_dataloader
 from src.difflinker.lightning import DDPM
 from src.utils import save_xyz_file
-
 
 
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'

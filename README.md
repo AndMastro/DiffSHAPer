@@ -37,7 +37,7 @@ Explanations are mapped to compounds structures, both in terms of graph represen
 
 We can see fragment atoms that favor (red) the generation of the linekr (green) and atoms that oppose it (blue). Mappings and computed Shapley values will be saved in the ```results/explanations/DATASET_NAME``` folder.
 
-The folder ```notebooks``` contains additional code used for analyses and experiments.
+The folder ```notebooks``` contains additional code used for analyses and experiments with a dedicated README file.
 
 ## 📫 Contacts
 

@@ -10,22 +10,28 @@ os.environ["http_proxy"] = "http://web-proxy.informatik.uni-bonn.de:3128"
 os.environ["https_proxy"] = "http://web-proxy.informatik.uni-bonn.de:3128"
 
 
+# Standard library imports
 import copy
 import random
+import os
 from numpy.random import default_rng
-import yaml
 
+# Third-party imports
+import yaml
 import torch
 import numpy as np
 from tqdm.auto import tqdm
-
-
 from pysmiles import read_smiles
 
-from src.utils import compute_hausdorff_distance_batch, visualize_mapping_graph, visualize_mapping_structure
+# Project-specific imports
+from src.utils import (
+    compute_hausdorff_distance_batch,
+    visualize_mapping_graph,
+    visualize_mapping_structure,
+    save_xyz_file
+)
 from src.difflinker.datasets import get_dataloader
 from src.difflinker.lightning import DDPM
-from src.utils import save_xyz_file
 
 
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'

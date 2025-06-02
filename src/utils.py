@@ -588,7 +588,94 @@ def load_molecule_xyz(file, is_geom):
             position = torch.Tensor([float(e) for e in atom[1:]])
             positions[i, :] = position
         return positions, one_hot, charges
+
+
+def compute_coulomb_matrix(mol, mask=None, diagonalize=False):
+    """
+    Compute the Coulomb matrix for a molecule.
     
+    Args:
+        mol (torch.Tensor): The molecule tensor with shape (N, 4), where N is the number of atoms.
+                            The last dimension should contain [x, y, z, atomic_number].
+        mask (torch.Tensor, optional): A mask indicating which atoms to consider. If not provided, all atoms will be considered.
+        diagonalize (bool, optional): Whether to return the diagonalized Coulomb matrix. Defaults to False.
+        
+    Returns:
+        torch.Tensor: The Coulomb matrix of the molecule.
+    """
+    if mask is not None:
+        mask = mask.bool()
+        mol = mol[mask, :]
+
+    positions = mol[:, :3]
+    one_hot = mol[:, 3:]
+    atomic_numbers = []
+    
+    for i, vec in enumerate(one_hot):
+        if torch.sum(vec) == 1:
+            atom_index = torch.argmax(vec).item()
+            atomic_number = const.CHARGES[const.IDX2ATOM[atom_index]]
+            atomic_numbers.append(atomic_number)
+        else:
+            atomic_numbers.append(0)  
+    
+    num_atoms = positions.shape[0]
+    coulomb_matrix = torch.zeros((num_atoms, num_atoms))
+
+    for i in range(num_atoms):
+        for j in range(num_atoms):
+            if i == j:
+                coulomb_matrix[i, j] = 0.5 * atomic_numbers[i] ** 2.4
+            else:
+                distance = torch.norm(positions[i] - positions[j])
+                if distance == 0: #avoid division by zero
+                    coulomb_matrix[i, j] = 0.0
+                else:
+                    coulomb_matrix[i, j] = atomic_numbers[i] * atomic_numbers[j] / distance
+
+    if diagonalize:
+        eigenvalues, _ = torch.linalg.eigh(coulomb_matrix)
+        coulomb_matrix = torch.diag(eigenvalues)
+
+    return coulomb_matrix
+
+def compute_coulomb_matrices_batch(molecules, masks=None, diagonalize=False):
+    """
+    Compute the Coulomb matrices for a batch of molecules.
+    
+    Args:
+        molecules (torch.Tensor): The batch of molecule tensors with shape (B, N, 4), where B is the batch size,
+                                    N is the number of atoms, and the last dimension should contain [x, y, z, atomic_number].
+        masks (torch.Tensor, optional): A batch of masks indicating which atoms to consider for each molecule. 
+                                        If not provided, all atoms will be considered.
+        
+    Returns:
+        torch.Tensor: The Coulomb matrices for the batch of molecules with shape (B, N, N).
+    """
+    batch_size = molecules.shape[0]
+    num_atoms = int(torch.sum(masks, dim=1).max().item()) if masks is not None else molecules.shape[1]
+    coulomb_matrices = torch.zeros((batch_size, num_atoms, num_atoms), device=molecules.device)
+
+    for b in range(batch_size):
+        mol = molecules[b]
+        mask = masks[b] if masks is not None else None
+        coulomb_matrices[b] = compute_coulomb_matrix(mol, mask, diagonalize=diagonalize)
+
+    return coulomb_matrices
+
+def compute_frobenius_norm_batch(matrices):
+    """
+    Compute the Frobenius norm for a batch of matrices.
+    
+    Args:
+        matrices (torch.Tensor): A batch of matrices with shape (B, N, N), where B is the batch size,
+                                    and N is the number of rows/columns in each matrix.
+        
+    Returns:
+        torch.Tensor: A tensor containing the Frobenius norm for each matrix in the batch.
+    """
+    return torch.linalg.norm(matrices, ord='fro', dim=(1, 2))
+
 def arrestomomentum():
     """
     This function is used to intentionally (and magically 🧙‍♂️) interrupt

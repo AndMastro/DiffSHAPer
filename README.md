@@ -18,6 +18,8 @@ conda env create -f environment.yml
 
 The enrivornment file provided within the repo was generated under Ubuntu. It may fail on Windows systems, so we recommend installing the needed packages separately in this case. If you have problems installing PyTorch from the environment, install following instructions [here](https://pytorch.org/get-started/locally/).
 
+> ⚠️ **Update** Since recently, PyTorch is no longer available on Conda. If installing from the environment file fails, we recommend installing PyTorch manually by following the [official instructions](https://pytorch.org/get-started/locally/) linked above.
+
 ## 🧠 Generate explanations
 
 The repository contains the script ```diffusion_explainer.py```. It will generate linkers using [DiffLinker](https://github.com/igashov/DiffLinker) and explain the generated molecules using our approach.

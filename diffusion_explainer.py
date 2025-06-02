@@ -6,8 +6,8 @@
 # See the LICENSE file in the project root for more information.
 
 import os
-# os.environ["http_proxy"] = "http://web-proxy.informatik.uni-bonn.de:3128"
-# os.environ["https_proxy"] = "http://web-proxy.informatik.uni-bonn.de:3128"
+os.environ["http_proxy"] = "http://web-proxy.informatik.uni-bonn.de:3128"
+os.environ["https_proxy"] = "http://web-proxy.informatik.uni-bonn.de:3128"
 
 
 import copy
@@ -64,9 +64,9 @@ if REFLECT:
 transformations_str = "_".join(transformations) if transformations else ""
 
 if transformations:
-    mapping_output_dir = os.path.join(SAVE_FOLDER, DATASET_NAME, f'explanations_seed_{SEED}_{transformations_str}_transformation_seed_{TRANSFORMATION_SEED}', "mapping")
+    mapping_output_dir = os.path.join(SAVE_FOLDER, DATASET_NAME, f'explanations_seed_{SEED}_{transformations_str}', "mapping")
 
-    shapley_values_save_path = os.path.join(SAVE_FOLDER, DATASET_NAME, f'explanations_seed_{SEED}_{transformations_str}_transformation_seed_{TRANSFORMATION_SEED}', "shapley_values")
+    shapley_values_save_path = os.path.join(SAVE_FOLDER, DATASET_NAME, f'explanations_seed_{SEED}_{transformations_str}', "shapley_values")
 else:
     mapping_output_dir = os.path.join(SAVE_FOLDER, DATASET_NAME, f'explanations_seed_{SEED}', "mapping")
     shapley_values_save_path = os.path.join(SAVE_FOLDER, DATASET_NAME, f'explanations_seed_{SEED}', "shapley_values")

@@ -7,6 +7,6 @@
 
 - 📊 **shapley_value_distribution_analysis.ipynb**  
     Analysis of the distribution of the Shapley values obtained starting from different initial states as well as statistical significance analyses.
-    
 
-> ⚠️ **Note:** Some fluctuations in the results may be expected due to nondeterministic elements involved in the analyses that cannot be fully controlled.
+
+> ⚠️ **Note:** Some fluctuations in the results may be expected due to nondeterministic elements involved that cannot be fully controlled.

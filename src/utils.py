@@ -323,11 +323,10 @@ def draw_sphere_xai(ax, x, y, z, size, color, alpha):
 #         ax.scatter(x, y, z, s=areas, alpha=0.9 * alpha, c=colors,
 #         rasterized=False)
 
-def plot_molecule_xai(ax, positions, atom_type, alpha, spheres_3d, hex_bg_color, is_geom, fragment_mask=None, phi_values=None, colors_fragment_shadow=None, draw_atom_indices = None):
+def plot_molecule_xai(ax, positions, atom_type, alpha, spheres_3d, hex_bg_color, is_geom, fragment_mask=None, phi_values=None, colors_fragment_shadow=None, draw_atom_indices = None, colormap='coolwarm_r'):
     x = positions[:, 0]
     y = positions[:, 1]
     z = positions[:, 2]
-    # Hydrogen, Carbon, Nitrogen, Oxygen, Flourine
 
     idx2atom = const.GEOM_IDX2ATOM if is_geom else const.IDX2ATOM
 
@@ -398,7 +397,7 @@ def plot_molecule_xai(ax, positions, atom_type, alpha, spheres_3d, hex_bg_color,
         if phi_values is not None and colors_fragment_shadow is None:
             phi_values_array = np.array(phi_values)
             # Calculate the gradient colors based on phi values
-            cmap = plt.cm.get_cmap('coolwarm_r') #reversed heatmap for distance-based importance
+            cmap = plt.cm.get_cmap(colormap)
             norm = plt.Normalize(vmin=min(phi_values_array), vmax=max(phi_values_array))
             colors_fragment_shadow = cmap(norm(phi_values_array))
         elif colors_fragment_shadow is not None and phi_values is None:
@@ -445,7 +444,7 @@ def plot_molecule_xai(ax, positions, atom_type, alpha, spheres_3d, hex_bg_color,
                 ax.text(x[i], y[i], z[i], str(txt), color='black', fontsize=15)
 
 def plot_data3d_xai(positions, atom_type, is_geom, camera_elev=0, camera_azim=0, save_path=None, spheres_3d=False,
-                bg='black', alpha=1., fragment_mask=None, phi_values=None):
+                bg='black', alpha=1., fragment_mask=None, phi_values=None, colormap='coolwarm_r'):
     black = (0, 0, 0)
     white = (1, 1, 1)
     hex_bg_color = '#FFFFFF' if bg == 'black' else '#000000' #'#666666'
@@ -469,7 +468,7 @@ def plot_data3d_xai(positions, atom_type, is_geom, camera_elev=0, camera_azim=0,
         ax.w_xaxis.line.set_color("white")
 
     plot_molecule_xai(
-        ax, positions, atom_type, alpha, spheres_3d, hex_bg_color, is_geom=is_geom, fragment_mask=fragment_mask, phi_values=phi_values
+        ax, positions, atom_type, alpha, spheres_3d, hex_bg_color, is_geom=is_geom, fragment_mask=fragment_mask, phi_values=phi_values, colormap=colormap
     )
 
     max_value = positions.abs().max().item()
@@ -493,8 +492,7 @@ def plot_data3d_xai(positions, atom_type, is_geom, camera_elev=0, camera_azim=0,
     plt.close()
 
 def visualize_mapping_graph(
-        path, spheres_3d=False, bg="black", alpha=1.0, is_geom=False, fragment_mask=None, phi_values=None, colors_fragment_shadow=None,
-                    draw_atom_indices=None
+        path, spheres_3d=False, bg="black", alpha=1.0, is_geom=False, fragment_mask=None, phi_values=None, colormap = 'coolwarm_r',colors_fragment_shadow=None, draw_atom_indices=None
 ):
     files = load_xyz_files(path)
     save_paths = []
@@ -527,7 +525,8 @@ def visualize_mapping_graph(
             camera_azim=90,
             is_geom=is_geom,
             fragment_mask=fragment_mask,
-            phi_values=phi_values
+            phi_values=phi_values,
+            colormap=colormap
         )
         save_paths.append(fn)
 

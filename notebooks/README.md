@@ -8,5 +8,11 @@
 - 📊 **shapley_value_distribution_analysis.ipynb**  
     Analysis of the distribution of the Shapley values obtained starting from different initial states as well as statistical significance analyses.
 
+- 🧬 **diffusion_explainer_coulomb_matrix_control.ipynb**  
+    Control experiments using a molecular mechanics Coulomb-matrix-based value function for the Shapley values
+
+- ⚓ **e3_transformation_control.ipynb**  
+    Analysis of anchor and non-anchor atoms' Shapley values in presence of E(3)-transformations.
+
 
 > ⚠️ **Note:** Some fluctuations in the results may be expected due to nondeterministic elements involved that cannot be fully controlled.

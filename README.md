@@ -4,7 +4,7 @@
 
 This is the official repository for the work **Explaining molecular diffusion models**.
 
-We propose an explainability strategy based on Shapley values for diffusion models with linker desgin as a use case.
+We propose an explainability strategy based on Shapley values for diffusion models with linker design as a use case.
 
 ## ⚙️ Prerequisites 
 

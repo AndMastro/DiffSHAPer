@@ -30,7 +30,7 @@ We also provide the notebook ```diffusion_explainer.ipynb``` for interactive ses
 
 ## 🔍 Inspect results
 
-Explanations are mapped to compounds structures, both in terms of graph representaitons and molecular graphs. The graph representation is generated inspired by visualization facilities from DiffLinker, while molecular graphs are generated using the [RDKit](https://www.rdkit.org/) library. An exemplary explanation with atom importance mapped onto molecular strucutres (left) and graph-visualization (right) may look like this:
+Explanations are mapped to compounds structures, both in terms of graph representations and molecular graphs. Graph representations are generated inspired by visualization facilities from DiffLinker, while molecular graphs are generated using the [RDKit](https://www.rdkit.org/) library. An exemplary explanation with atom importance mapped onto molecular strucutres (left) and graph visualization (right) may look like this:
 
 <p align="center">
   <img src="results/explanations/zinc_final_test/explanations_seed_42/mapping/structures/8/8_0_structure.png" alt="exemplary explanation mapped onto molecular structures" width="45%" style="display:inline-block; margin-right:2%;">

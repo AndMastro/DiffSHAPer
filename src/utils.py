@@ -40,13 +40,12 @@ def compute_hausdorff_distance_batch(mol1, mol2, mask1 = None, mask2 = None):
         list: A list of Hausdorff distances for each pair of molecules in the
         batch.
     """
-    # If fragment_mask is provided, only consider the atoms in the mask
-
+    
     #take only the positions
     mol1 = mol1[:, :, :3]
     mol2 = mol2[:, :, :3]
     
-    
+    # If masks are provided, only consider the atoms in the mask
     if mask1 is not None:
         mask1 = mask1.bool()
         batch_size = mol1.shape[0]
@@ -82,7 +81,7 @@ def compute_hausdorff_distance_batch(mol1, mol2, mask1 = None, mask2 = None):
 
 
 
-# Visualize generated molecules as molecular graphs #maybe substitute phi_values with actula colors
+# Visualize generated molecules as molecular graphs
 def visualize_mapping_structure(file_names, generation_folder, shapley_values, fragment_mask, linker_mask, save_folder, colormap = 'coolwarm_r'):
     """
     Visualizes the mapping structure of generated molecules by coloring atoms and bonds according to Shapley values and fragment/linker masks, and saves the resulting images.
@@ -260,69 +259,6 @@ def draw_sphere_xai(ax, x, y, z, size, color, alpha):
     zs = size * np.outer(np.ones(np.size(u)), np.cos(v))
     ax.plot_surface(x + xs, y + ys, z + zs, rstride=2, cstride=2, color=color, alpha=alpha)
 
-# def plot_molecule_xai(ax, positions, atom_type, alpha, spheres_3d,
-#     hex_bg_color, is_geom, fragment_mask=None, phi_values=None): x =
-#     positions[:, 0] y = positions[:, 1] z = positions[:, 2] # Hydrogen,
-#     Carbon, Nitrogen, Oxygen, Flourine
-
-#     idx2atom = const.GEOM_IDX2ATOM if is_geom else const.IDX2ATOM
-
-#     colors_dic = np.array(const.COLORS) radius_dic = np.array(const.RADII)
-#     area_dic = 1500 * radius_dic ** 2
-
-#     areas = area_dic[atom_type] radii = radius_dic[atom_type] colors =
-#     colors_dic[atom_type]
-
-#     if fragment_mask is None: fragment_mask = torch.ones(len(x))
-
-#     for i in range(len(x)): for j in range(i + 1, len(x)): p1 =
-#         np.array([x[i], y[i], z[i]]) p2 = np.array([x[j], y[j], z[j]]) dist =
-#             np.sqrt(np.sum((p1 - p2) ** 2)) atom1, atom2 =
-#             idx2atom[atom_type[i]], idx2atom[atom_type[j]] draw_edge_int =
-#             get_bond_order(atom1, atom2, dist) line_width = (3 - 2) * 2 * 2
-#             draw_edge = draw_edge_int > 0 if draw_edge: if draw_edge_int == 4:
-#             linewidth_factor = 1.5 else: linewidth_factor = 1 linewidth_factor
-#             *= 0.5 ax.plot( [x[i], x[j]], [y[i], y[j]], [z[i], z[j]],
-#             linewidth=line_width * linewidth_factor * 2, c=hex_bg_color,
-#             alpha=alpha )
-
-    
-
-#     if spheres_3d:
-        
-#         for i, j, k, s, c, f, phi in zip(x, y, z, radii, colors,
-#             fragment_mask, phi_values): if f == 1: alpha = 1.0 if phi > 0: c =
-#                 'red'
-
-#             draw_sphere_xai(ax, i.item(), j.item(), k.item(), 0.5 * s, c,
-#             alpha)
-
-#     else: phi_values_array = np.array(list(phi_values.values()))
-
-#         #draw fragments fragment_mask_on_cpu = fragment_mask.cpu().numpy()
-#         colors_fragment = colors[fragment_mask_on_cpu == 1] x_fragment =
-#         x[fragment_mask_on_cpu == 1] y_fragment = y[fragment_mask_on_cpu == 1]
-#         z_fragment = z[fragment_mask_on_cpu == 1] areas_fragment =
-#         areas[fragment_mask_on_cpu == 1]
-        
-#         # Calculate the gradient colors based on phi values
-#         cmap = plt.cm.get_cmap('coolwarm_r') #reversed heatmap for
-#         distance-based importance norm =
-#         plt.Normalize(vmin=min(phi_values_array), vmax=max(phi_values_array))
-#         colors_fragment_shadow = cmap(norm(phi_values_array))
-        
-#         # ax.scatter(x_fragment, y_fragment, z_fragment, s=areas_fragment, alpha=0.9 * alpha, c=colors_fragment)
-
-#         ax.scatter(x_fragment, y_fragment, z_fragment, s=areas_fragment,
-#         alpha=0.9 * alpha, c=colors_fragment,
-#         edgecolors=colors_fragment_shadow, linewidths=5, rasterized=False)
-
-#         #draw non-fragment atoms colors = colors[fragment_mask_on_cpu == 0] x
-#         = x[fragment_mask_on_cpu == 0] y = y[fragment_mask_on_cpu == 0] z =
-#         z[fragment_mask_on_cpu == 0] areas = areas[fragment_mask_on_cpu == 0]
-#         ax.scatter(x, y, z, s=areas, alpha=0.9 * alpha, c=colors,
-#         rasterized=False)
-
 def plot_molecule_xai(ax, positions, atom_type, alpha, spheres_3d, hex_bg_color, is_geom, fragment_mask=None, phi_values=None, colors_fragment_shadow=None, draw_atom_indices = None, colormap='coolwarm_r'):
     x = positions[:, 0]
     y = positions[:, 1]
@@ -480,8 +416,6 @@ def plot_data3d_xai(positions, atom_type, is_geom, camera_elev=0, camera_azim=0,
 
     if save_path is not None:
         plt.savefig(save_path, bbox_inches='tight', pad_inches=0.0, dpi=dpi)
-        # plt.savefig(save_path, bbox_inches='tight', pad_inches=0.0, dpi=dpi,
-        # transparent=True)
 
         if spheres_3d:
             img = imageio.imread(save_path)

@@ -18,7 +18,7 @@
     Analysis of the impact of important non-anchor neighboring atoms. For a fine-grain analysis, the parameter ``KEEP_FRAMES`` in ``config.yml`` should be set at least to 30. In order to perform atom injection, the corresponing parameter in the configuration files should be set to ``True``.
 
 - 📏 **hausdorff_distace_plotter.ipynb**  
-    After having computed the distances using the previous notebook, this code plots the distances when atoms are removed and injected back into the molecule.
+    After having computed the distances using the ``neighbor_atom_analysis.ipynb`` notebook, this code can be used to generate plots.
 
 
 > ⚠️ **Note:** Some fluctuations in the results may be expected due to nondeterministic elements involved that cannot be fully controlled.

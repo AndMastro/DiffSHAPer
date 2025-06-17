@@ -388,7 +388,7 @@ def plot_molecule_xai(ax, positions, atom_type, alpha, spheres_3d, hex_bg_color,
 
         #draw fragments
         fragment_mask_on_cpu = fragment_mask.cpu().numpy()
-        colors_fragment = colors[fragment_mask_on_cpu == 1]
+        # colors_fragment = colors[fragment_mask_on_cpu == 1]
         x_fragment = x[fragment_mask_on_cpu == 1]
         y_fragment = y[fragment_mask_on_cpu == 1]
         z_fragment = z[fragment_mask_on_cpu == 1]
@@ -444,7 +444,7 @@ def plot_molecule_xai(ax, positions, atom_type, alpha, spheres_3d, hex_bg_color,
                 ax.text(x[i], y[i], z[i], str(txt), color='black', fontsize=15)
 
 def plot_data3d_xai(positions, atom_type, is_geom, camera_elev=0, camera_azim=0, save_path=None, spheres_3d=False,
-                bg='black', alpha=1., fragment_mask=None, phi_values=None, colormap='coolwarm_r'):
+                bg='black', alpha=1., fragment_mask=None, phi_values=None, colormap='coolwarm_r', colors_fragment_shadow=None, draw_atom_indices=None):
     black = (0, 0, 0)
     white = (1, 1, 1)
     hex_bg_color = '#FFFFFF' if bg == 'black' else '#000000' #'#666666'
@@ -468,7 +468,7 @@ def plot_data3d_xai(positions, atom_type, is_geom, camera_elev=0, camera_azim=0,
         ax.w_xaxis.line.set_color("white")
 
     plot_molecule_xai(
-        ax, positions, atom_type, alpha, spheres_3d, hex_bg_color, is_geom=is_geom, fragment_mask=fragment_mask, phi_values=phi_values, colormap=colormap
+        ax, positions, atom_type, alpha, spheres_3d, hex_bg_color, is_geom=is_geom, fragment_mask=fragment_mask, phi_values=phi_values, colormap=colormap, colors_fragment_shadow=colors_fragment_shadow, draw_atom_indices=draw_atom_indices
     )
 
     max_value = positions.abs().max().item()
@@ -492,9 +492,9 @@ def plot_data3d_xai(positions, atom_type, is_geom, camera_elev=0, camera_azim=0,
     plt.close()
 
 def visualize_mapping_graph(
-        path, spheres_3d=False, bg="black", alpha=1.0, is_geom=False, fragment_mask=None, phi_values=None, colormap = 'coolwarm_r',colors_fragment_shadow=None, draw_atom_indices=None
+        path, file_indices = None, spheres_3d=False, bg="black", alpha=1.0, is_geom=False, fragment_mask=None, phi_values=None, colormap = 'coolwarm_r',colors_fragment_shadow=None, draw_atom_indices=None
 ):
-    files = load_xyz_files(path)
+    files = load_xyz_files(path, file_indices=file_indices)
     save_paths = []
 
     # Fit PCA to the final molecule – to obtain the best orientation for
@@ -526,7 +526,9 @@ def visualize_mapping_graph(
             is_geom=is_geom,
             fragment_mask=fragment_mask,
             phi_values=phi_values,
-            colormap=colormap
+            colormap=colormap,
+            colors_fragment_shadow=colors_fragment_shadow,
+            draw_atom_indices=draw_atom_indices
         )
         save_paths.append(fn)
 
@@ -555,7 +557,6 @@ def save_xyz_file(path, one_hot, positions, node_mask, names, is_geom, suffix=''
             ))
         f.close()
 
-#@mastro edited
 def load_xyz_files(path, suffix='', file_indices=None):
     files = []
     

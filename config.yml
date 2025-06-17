@@ -15,3 +15,4 @@ ROTATE: False #True to have rotation of the molecule, False to have no rotation
 TRANSLATE: False #True to have translation of the molecule, False to have no translation
 REFLECT: False #True to have reflection of the molecule, False to have no reflection
 TRANSFORMATION_SEED: 42 #seed for random transformation
+ATOM_INJECTION: False #Used only in neighbor_atom_analysis.ipynb, True to inject atoms into the molecule after removal, False to have atom removal only

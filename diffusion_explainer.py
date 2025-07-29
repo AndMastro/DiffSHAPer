@@ -1,13 +1,21 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# Copyright (c) 2024, Andrea Mastropietro. All rights reserved.
+# Copyright © 2024, Andrea Mastropietro. All rights reserved.
+# 
 # This code is licensed under the MIT License.
+# 
 # See the LICENSE file in the project root for more information.
 
+# In[1]:
+
+
 import os
-# os.environ["http_proxy"] = "http://web-proxy.informatik.uni-bonn.de:3128"
-# os.environ["https_proxy"] = "http://web-proxy.informatik.uni-bonn.de:3128"
+os.environ["http_proxy"] = "http://web-proxy.informatik.uni-bonn.de:3128"
+os.environ["https_proxy"] = "http://web-proxy.informatik.uni-bonn.de:3128"
+
+
+# In[2]:
 
 
 # Standard library imports
@@ -34,6 +42,15 @@ from src.difflinker.datasets import get_dataloader
 from src.difflinker.lightning import DDPM
 
 
+# In[3]:
+
+
+from src.utils import arrestomomentum
+
+
+# In[4]:
+
+
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
 with open('config.yml', 'r') as file:
@@ -56,8 +73,11 @@ M = int(config['M'])
 NUM_SAMPLES = int(config['NUM_SAMPLES'])
 PARALLEL_STEPS = int(config['PARALLEL_STEPS'])
 LOAD_INITIAL_DISTRIBUTION = config['LOAD_INITIAL_DISTRIBUTION']
+ATOM_TYPE_PERTURBATION = config['ATOM_TYPE_PERTURBATION']
 
 print("Random seed: ", SEED)
+if ATOM_TYPE_PERTURBATION:
+    print("Perfoming Monte Carlo sampling with atom type perturbation.")
 
 transformations = []
 if ROTATE:
@@ -72,10 +92,24 @@ transformations_str = "_".join(transformations) if transformations else ""
 if transformations:
     mapping_output_dir = os.path.join(SAVE_FOLDER, DATASET_NAME, f'explanations_seed_{SEED}_{transformations_str}', "mapping")
 
+    if ATOM_TYPE_PERTURBATION:
+        mapping_output_dir = os.path.join(mapping_output_dir, "including_atom_type_perturbation")
+
     shapley_values_save_path = os.path.join(SAVE_FOLDER, DATASET_NAME, f'explanations_seed_{SEED}_{transformations_str}', "shapley_values")
+
+    if ATOM_TYPE_PERTURBATION:
+        shapley_values_save_path = os.path.join(shapley_values_save_path, "including_atom_type_perturbation")
 else:
     mapping_output_dir = os.path.join(SAVE_FOLDER, DATASET_NAME, f'explanations_seed_{SEED}', "mapping")
+
+    if ATOM_TYPE_PERTURBATION:
+        mapping_output_dir = os.path.join(mapping_output_dir, "including_atom_type_perturbation")
+
     shapley_values_save_path = os.path.join(SAVE_FOLDER, DATASET_NAME, f'explanations_seed_{SEED}', "shapley_values")
+
+    if ATOM_TYPE_PERTURBATION:
+        shapley_values_save_path = os.path.join(shapley_values_save_path, "including_atom_type_perturbation")
+        
 os.makedirs(mapping_output_dir, exist_ok=True)
 os.makedirs(shapley_values_save_path, exist_ok=True)
 
@@ -100,6 +134,8 @@ dataloader = get_dataloader(
 )
 
 
+# In[5]:
+
 
 #set random seeds
 torch.manual_seed(SEED)
@@ -110,6 +146,10 @@ random.seed(SEED)
 
 
 # ### Explainabiliy phase
+
+# ##### Multiple sampling steps at a time
+
+# In[6]:
 
 
 sampled = 0
@@ -167,6 +207,8 @@ else:
 
 for data_index, data in enumerate(tqdm(data_list)):
 
+        # start_time = time.time()
+        
         smile = data["name"][0]
         
         mol = read_smiles(smile)
@@ -186,7 +228,7 @@ for data_index, data in enumerate(tqdm(data_list)):
         edge_node_ratio = num_edges/num_nodes
         
         if P == "graph_density":
-            P = graph_density 
+            P = graph_density
         elif P == "node_density":
             P = node_density
         elif P == "node_edge_ratio" or P == "edge_node_ratio":
@@ -210,7 +252,6 @@ for data_index, data in enumerate(tqdm(data_list)):
         rng_torch.manual_seed(SEED)
 
         #apply E(3) trasformations to the molecule. Linker atoms will be tranformed, too, but their transformations will be discarded in liue of the noisy positions
-        # print("Positions before transformations:", data["positions"])
         transform_rng = None
         if transformations:
             transform_rng = default_rng(seed = TRANSFORMATION_SEED)
@@ -236,7 +277,7 @@ for data_index, data in enumerate(tqdm(data_list)):
             translation_vector = torch.tensor(transform_rng.uniform(-1, 1, (1, 3)), device=device, dtype=torch.float32)
             data["positions"] = data["positions"] + translation_vector
         if REFLECT:
-            #reflect molecule acrpss the xy plane
+            #reflect molecule across the xy plane
             reflection_matrix = torch.tensor([[1.0, 0.0, 0.0],
                                       [0.0, 1.0, 0.0],
                                       [0.0, 0.0, -1.0]], device=device)
@@ -335,16 +376,35 @@ for data_index, data in enumerate(tqdm(data_list)):
                 N_j_plus_index[pi_add] = torch.where(k_values <= selected_node_index, N_mask[pi_add], N_z_mask[pi_add])
                 N_j_minus_index[pi_add] = torch.where(k_values < selected_node_index, N_mask[pi_add], N_z_mask[pi_add]) 
 
+                if ATOM_TYPE_PERTURBATION:
+                    N_j_plus_index_perturbed_atom_types = torch.ones(PARALLEL_STEPS*num_fragment_atoms, dtype=torch.int, device=device)
+                    N_j_minus_index_perturbed_atom_types = torch.ones(PARALLEL_STEPS*num_fragment_atoms, dtype=torch.int, device=device)
+                    # set to atom indices that must be perturbed
+                    N_j_plus_index_perturbed_atom_types[pi_add] = torch.where(
+                        k_values <= selected_node_index,
+                        torch.tensor(0, device=device, dtype=torch.int),
+                        torch.tensor(1, device=device, dtype=torch.int)
+                    )
+                    N_j_minus_index_perturbed_atom_types[pi_add] = torch.where(
+                        k_values < selected_node_index,
+                        torch.tensor(0, device=device, dtype=torch.int),
+                        torch.tensor(1, device=device, dtype=torch.int)
+                    )
+                    
                 #fragements to keep in molecule j plus
                 fragment_indices = fragment_indices + add_to_node_index
                 
                 N_j_plus = fragment_indices[(N_j_plus_index==1)] #fragment to keep in molecule j plus
 
-                #fragement indices to keep in molecule j minus
+                #fragment indices to keep in molecule j minus
                 N_j_minus = fragment_indices[(N_j_minus_index==1)] #it contains fragmens indices to keep in molecule j minus (indices that index the atom nodes)
 
-                #fragement indices to keep in random molecule
+                #fragment indices to keep in random molecule
                 N_random_sample = fragment_indices[(N_z_mask==1)] 
+
+                if ATOM_TYPE_PERTURBATION:
+                    N_j_plus_perturbed_atom_types = fragment_indices[(N_j_plus_index_perturbed_atom_types==1)]
+                    N_j_minus_perturbed_atom_types = fragment_indices[(N_j_minus_index_perturbed_atom_types==1)]
                 
                 atom_mask_j_plus = torch.zeros(num_atoms*PARALLEL_STEPS, dtype=torch.bool)
                 atom_mask_j_minus = torch.zeros(num_atoms*PARALLEL_STEPS, dtype=torch.bool)
@@ -353,6 +413,15 @@ for data_index, data in enumerate(tqdm(data_list)):
                 atom_mask_j_plus[N_j_plus] = True
                 
                 atom_mask_j_minus[N_j_minus] = True
+
+                if ATOM_TYPE_PERTURBATION:
+                    atom_mask_j_plus_to_perturb = torch.zeros(num_atoms*PARALLEL_STEPS, dtype=torch.bool)
+                    atom_mask_j_minus_to_perturb = torch.zeros(num_atoms*PARALLEL_STEPS, dtype=torch.bool)
+                    atom_mask_j_plus_to_perturb[N_j_plus_perturbed_atom_types] = True
+                    atom_mask_j_minus_to_perturb[N_j_minus_perturbed_atom_types] = True
+
+                    atom_mask_j_plus_to_perturb = atom_mask_j_plus_to_perturb.view(PARALLEL_STEPS, num_atoms)
+                    atom_mask_j_minus_to_perturb = atom_mask_j_minus_to_perturb.view(PARALLEL_STEPS, num_atoms)
 
                 #set to true also linker atoms
                 parallelized_linker_mask = data["linker_mask"][0].squeeze().to(torch.int).repeat(PARALLEL_STEPS)
@@ -405,6 +474,32 @@ for data_index, data in enumerate(tqdm(data_list)):
                     data_j_minus_dict[i] = copy.deepcopy(data)
                     data_random_dict[i] = copy.deepcopy(data)
 
+                    #if the atom type perturbation is enabled, we perturb the atom types
+                    if ATOM_TYPE_PERTURBATION:
+                        # perturb the atom types of the random sample by generating a random one-hot encoding this is applied to the molecules containing all the atoms (before applying the masks to remove the atoms that are not present in the samples during MC sampling)
+                        # print("One hot before randomization:", data_random_dict[i]["one_hot"])
+                        random_one_hot = torch.zeros_like(data_random_dict[i]["one_hot"])
+                        # random_indices = torch.randint(0, data_random_dict[i]["one_hot"].shape[1], (data_random_dict[i]["one_hot"].shape[0],), device=device)
+                        # random_one_hot[torch.arange(data_random_dict[i]["one_hot"].shape[0]), random_indices] = 1
+                        batch_size, num_atoms, num_types = random_one_hot.shape
+                        random_indices = torch.randint(0, num_types, (batch_size, num_atoms), device=device)
+                        random_one_hot.scatter_(2, random_indices.unsqueeze(-1), 1)
+                        data_random_dict[i]["one_hot"] = random_one_hot
+                        
+                        # print("Random one-hot encoding for atom types applied to the random sample:", data_random_dict[i]["one_hot"])
+
+                        #use the same random one-hot encoding for the j plus and j minus samples for the atoms indexed by atom_mask_j_plus_to_perturb and atom_mask_j_minus_to_perturb
+                        current_mask = atom_mask_j_plus_to_perturb[i]  # shape: [num_atoms]
+                        data_j_plus_dict[i]["one_hot"][:, current_mask, :] = random_one_hot[:, current_mask, :]
+                        
+                        current_mask = atom_mask_j_minus_to_perturb[i]  # shape: [num_atoms]
+                        data_j_minus_dict[i]["one_hot"][:, current_mask, :] = random_one_hot[:, current_mask, :]
+
+                        # print("Random one-hot encoding for atom types applied to the j plus sample:", data_j_plus_dict[i]["one_hot"])
+                        # print("Random one-hot encoding for atom types applied to the j minus sample:", data_j_minus_dict[i]["one_hot"])
+
+                        
+
                     #data j plus
                     data_j_plus_dict[i]["positions"] = data_j_plus_dict[i]["positions"][:, atom_mask_j_plus[i]]
                     data_j_plus_dict[i]["num_atoms"] = data_j_plus_dict[i]["positions"].shape[1]
@@ -443,6 +538,7 @@ for data_index, data in enumerate(tqdm(data_list)):
                     data_random_dict[i]["num_atoms"] = data_random_dict[i]["positions"].shape[1]
                     # remove one_hot of atoms in random_indices
                     data_random_dict[i]["one_hot"] = data_random_dict[i]["one_hot"][:, atom_mask_random_molecule[i]]
+                        
                     # remove atom_mask of atoms in random_indices
                     data_random_dict[i]["atom_mask"] = data_random_dict[i]["atom_mask"][:, atom_mask_random_molecule[i]]
                     # remove fragment_mask of atoms in random_indices
@@ -455,6 +551,9 @@ for data_index, data in enumerate(tqdm(data_list)):
                     edge_mask_to_keep = (atom_mask_random_molecule[i].unsqueeze(1) * atom_mask_random_molecule[i]).flatten() 
 
                     data_random_dict[i]["edge_mask"] = data_random_dict[i]["edge_mask"][edge_mask_to_keep]
+
+                    
+                        
                 
 
 
@@ -816,7 +915,8 @@ for data_index, data in enumerate(tqdm(data_list)):
                     bg='white',
                     is_geom=model.is_geom,
                     fragment_mask=data['fragment_mask'][i].squeeze(),
-                    phi_values=list(phi_values_for_viz.values()) 
+                    phi_values=list(phi_values_for_viz.values()),
+                    heatmap='coolwarm_r' #reverse heatmap for distance-based importance 
                 )
 
                 mapping_output_structure = os.path.join(mapping_output_dir, "structures", name)
@@ -829,7 +929,6 @@ for data_index, data in enumerate(tqdm(data_list)):
                     linker_mask = data['linker_mask'][0].cpu().numpy(),
                     save_folder = mapping_output_structure
                 )
-
 
             start += len(data['positions'])
 

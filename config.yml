@@ -11,9 +11,9 @@ SAVE_VISUALIZATION: True #True to save the visualization of the explanations, Fa
 LOAD_INITIAL_DISTRIBUTION: True #True to load the initial distribution for the linker atoms, False to randomly generate it according to the set SEED. initial distrubutions available for seeds 42, 1240, 14085. Newly generated distributions are saved in the folder datasets/initial_distributions
 M: 100 #number of Monte Carlo sampling steps for Shapley values approximation
 PARALLEL_STEPS: 100 #number of parallel steps for the Monte Calro sampling
-ROTATE: False #True to have rotation of the molecule, False to have no rotation
-TRANSLATE: False #True to have translation of the molecule, False to have no translation
-REFLECT: False #True to have reflection of the molecule, False to have no reflection
+ROTATE: True #True to have rotation of the molecule, False to have no rotation
+TRANSLATE: True #True to have translation of the molecule, False to have no translation
+REFLECT: True #True to have reflection of the molecule, False to have no reflection
 TRANSFORMATION_SEED: 42 #seed for random transformation
 ATOM_TYPE_PERTURBATION: True #True to perturb the atom types in the MC sampling, False to not perturb the atom types
 ATOM_INJECTION: False #Used only in neighbor_atom_analysis.ipynb, True to inject atoms into the molecule after removal, False to have atom removal only

@@ -7,7 +7,7 @@
 # 
 # See the LICENSE file in the project root for more information.
 
-# In[1]:
+# In[ ]:
 
 
 import os
@@ -15,7 +15,7 @@ os.environ["http_proxy"] = "http://web-proxy.informatik.uni-bonn.de:3128"
 os.environ["https_proxy"] = "http://web-proxy.informatik.uni-bonn.de:3128"
 
 
-# In[2]:
+# In[ ]:
 
 
 # Standard library imports
@@ -42,13 +42,13 @@ from src.difflinker.datasets import get_dataloader
 from src.difflinker.lightning import DDPM
 
 
-# In[3]:
+# In[ ]:
 
 
 from src.utils import arrestomomentum
 
 
-# In[4]:
+# In[ ]:
 
 
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
@@ -78,6 +78,9 @@ ATOM_TYPE_PERTURBATION = config['ATOM_TYPE_PERTURBATION']
 print("Random seed: ", SEED)
 if ATOM_TYPE_PERTURBATION:
     print("Perfoming Monte Carlo sampling with atom type perturbation.")
+    atom_type_rng = torch.Generator(device=device)
+    atom_type_rng.manual_seed(SEED) 
+
 
 transformations = []
 if ROTATE:
@@ -89,26 +92,32 @@ if REFLECT:
 
 transformations_str = "_".join(transformations) if transformations else ""
 
+
 if transformations:
-    mapping_output_dir = os.path.join(SAVE_FOLDER, DATASET_NAME, f'explanations_seed_{SEED}_{transformations_str}', "mapping")
 
     if ATOM_TYPE_PERTURBATION:
-        mapping_output_dir = os.path.join(mapping_output_dir, "including_atom_type_perturbation")
+        mapping_output_dir = os.path.join(SAVE_FOLDER, DATASET_NAME, f'explanations_seed_{SEED}_{transformations_str}', "including_atom_type_perturbation", "mapping")
 
-    shapley_values_save_path = os.path.join(SAVE_FOLDER, DATASET_NAME, f'explanations_seed_{SEED}_{transformations_str}', "shapley_values")
+        shapley_values_save_path = os.path.join(SAVE_FOLDER, DATASET_NAME, f'explanations_seed_{SEED}_{transformations_str}', "including_atom_type_perturbation", "shapley_values")
 
-    if ATOM_TYPE_PERTURBATION:
-        shapley_values_save_path = os.path.join(shapley_values_save_path, "including_atom_type_perturbation")
+    else:    
+        mapping_output_dir = os.path.join(SAVE_FOLDER, DATASET_NAME, f'explanations_seed_{SEED}_{transformations_str}', "mapping")
+
+        shapley_values_save_path = os.path.join(SAVE_FOLDER, DATASET_NAME, f'explanations_seed_{SEED}_{transformations_str}', "shapley_values")
+
+    
 else:
-    mapping_output_dir = os.path.join(SAVE_FOLDER, DATASET_NAME, f'explanations_seed_{SEED}', "mapping")
 
     if ATOM_TYPE_PERTURBATION:
-        mapping_output_dir = os.path.join(mapping_output_dir, "including_atom_type_perturbation")
+        mapping_output_dir = os.path.join(SAVE_FOLDER, DATASET_NAME, f'explanations_seed_{SEED}', "including_atom_type_perturbation", "mapping")
 
-    shapley_values_save_path = os.path.join(SAVE_FOLDER, DATASET_NAME, f'explanations_seed_{SEED}', "shapley_values")
+        shapley_values_save_path = os.path.join(SAVE_FOLDER, DATASET_NAME, f'explanations_seed_{SEED}', "including_atom_type_perturbation", "shapley_values")
 
-    if ATOM_TYPE_PERTURBATION:
-        shapley_values_save_path = os.path.join(shapley_values_save_path, "including_atom_type_perturbation")
+    else:
+        mapping_output_dir = os.path.join(SAVE_FOLDER, DATASET_NAME, f'explanations_seed_{SEED}', "mapping")
+        
+        shapley_values_save_path = os.path.join(SAVE_FOLDER, DATASET_NAME, f'explanations_seed_{SEED}', "shapley_values")
+
         
 os.makedirs(mapping_output_dir, exist_ok=True)
 os.makedirs(shapley_values_save_path, exist_ok=True)
@@ -134,7 +143,7 @@ dataloader = get_dataloader(
 )
 
 
-# In[5]:
+# In[ ]:
 
 
 #set random seeds
@@ -149,7 +158,7 @@ random.seed(SEED)
 
 # ##### Multiple sampling steps at a time
 
-# In[6]:
+# In[ ]:
 
 
 sampled = 0
@@ -475,14 +484,14 @@ for data_index, data in enumerate(tqdm(data_list)):
                     data_random_dict[i] = copy.deepcopy(data)
 
                     #if the atom type perturbation is enabled, we perturb the atom types
-                    if ATOM_TYPE_PERTURBATION:
+                    if ATOM_TYPE_PERTURBATION: #ATOM_TYPE_PERTURBATION
                         # perturb the atom types of the random sample by generating a random one-hot encoding this is applied to the molecules containing all the atoms (before applying the masks to remove the atoms that are not present in the samples during MC sampling)
                         # print("One hot before randomization:", data_random_dict[i]["one_hot"])
                         random_one_hot = torch.zeros_like(data_random_dict[i]["one_hot"])
                         # random_indices = torch.randint(0, data_random_dict[i]["one_hot"].shape[1], (data_random_dict[i]["one_hot"].shape[0],), device=device)
                         # random_one_hot[torch.arange(data_random_dict[i]["one_hot"].shape[0]), random_indices] = 1
                         batch_size, num_atoms, num_types = random_one_hot.shape
-                        random_indices = torch.randint(0, num_types, (batch_size, num_atoms), device=device)
+                        random_indices = torch.randint(0, num_types, (batch_size, num_atoms), generator=atom_type_rng, device=device)
                         random_one_hot.scatter_(2, random_indices.unsqueeze(-1), 1)
                         data_random_dict[i]["one_hot"] = random_one_hot
                         
@@ -916,7 +925,7 @@ for data_index, data in enumerate(tqdm(data_list)):
                     is_geom=model.is_geom,
                     fragment_mask=data['fragment_mask'][i].squeeze(),
                     phi_values=list(phi_values_for_viz.values()),
-                    heatmap='coolwarm_r' #reverse heatmap for distance-based importance 
+                    colormap='coolwarm_r' #reverse heatmap for distance-based importance 
                 )
 
                 mapping_output_structure = os.path.join(mapping_output_dir, "structures", name)

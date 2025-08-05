@@ -45,12 +45,6 @@ from src.difflinker.lightning import DDPM
 # In[ ]:
 
 
-from src.utils import arrestomomentum
-
-
-# In[ ]:
-
-
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
 with open('config.yml', 'r') as file:
@@ -484,7 +478,7 @@ for data_index, data in enumerate(tqdm(data_list)):
                     data_random_dict[i] = copy.deepcopy(data)
 
                     #if the atom type perturbation is enabled, we perturb the atom types
-                    if ATOM_TYPE_PERTURBATION: #ATOM_TYPE_PERTURBATION
+                    if ATOM_TYPE_PERTURBATION:
                         # perturb the atom types of the random sample by generating a random one-hot encoding this is applied to the molecules containing all the atoms (before applying the masks to remove the atoms that are not present in the samples during MC sampling)
                         # print("One hot before randomization:", data_random_dict[i]["one_hot"])
                         random_one_hot = torch.zeros_like(data_random_dict[i]["one_hot"])
@@ -859,15 +853,6 @@ for data_index, data in enumerate(tqdm(data_list)):
         for atom_index, phi_values in phi_atoms.items():
             phi_atoms_hausdorff[atom_index] = phi_values[0]
 
-        if True:
-            sum_of_shapley_values = sum(phi_atoms_hausdorff.values())
-            average_distance_random_samples = sum(hausdorff_distances_random_samples) / len(hausdorff_distances_random_samples)
-            print("Shapley values for atoms:", phi_atoms_hausdorff)
-            print("Sum of Shapley values:", sum_of_shapley_values)
-            print("Average distance of random samples:", average_distance_random_samples)
-            print("Approximation error (abs): ", abs(sum_of_shapley_values + average_distance_random_samples))
-            print("Approximation error: ", sum_of_shapley_values + average_distance_random_samples)
-            
         # Save phi_atoms to a text file
         if SAVE_SHAPLEY_VALUES:
             with open(f'{shapley_values_save_path}/shapley_values_atoms_{data_index}.txt', 'w') as write_file:

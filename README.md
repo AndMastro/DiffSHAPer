@@ -18,7 +18,7 @@ conda env create -f environment.yml
 
 The enrivornment file provided within the repo was generated under Ubuntu. It may fail on Windows systems, so we recommend installing the needed packages separately in this case. If you have problems installing PyTorch from the environment, install following instructions [here](https://pytorch.org/get-started/locally/).
 
-> ⚠️ **Update** Since recently, PyTorch is no longer available on Conda. If installing from the environment file fails, we recommend installing PyTorch manually by following the [official instructions](https://pytorch.org/get-started/locally/) linked above.
+> ⚠️ **Update** Since recently, PyTorch is no longer available on Conda. If installing from the environment file fails, we recommend installing PyTorch (by following the [official instructions](https://pytorch.org/get-started/locally/) linked above) and the other requirements manually.
 
 ## 🧠 Generate explanations
 
@@ -44,3 +44,4 @@ The folder [```notebooks```](https://github.com/AndMastro/DiffSHAPer/tree/main/n
 ## 📫 Contacts
 
 For any clarification, doubt, or curiosity, feel free to drop an [email](mailto:mastropietro@bit.uni-bonn.de).
+

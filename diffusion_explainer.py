@@ -11,8 +11,8 @@
 
 
 import os
-os.environ["http_proxy"] = "http://web-proxy.informatik.uni-bonn.de:3128"
-os.environ["https_proxy"] = "http://web-proxy.informatik.uni-bonn.de:3128"
+# os.environ["http_proxy"] = "http://web-proxy.informatik.uni-bonn.de:3128"
+# os.environ["https_proxy"] = "http://web-proxy.informatik.uni-bonn.de:3128"
 
 
 # In[ ]:
@@ -69,6 +69,7 @@ TRANSLATE = config['TRANSLATE']
 REFLECT = config['REFLECT']
 TRANSFORMATION_SEED = int(config['TRANSFORMATION_SEED'])
 SAVE_VISUALIZATION = config['SAVE_VISUALIZATION']
+SAVE_SHAPLEY_VALUES = config['SAVE_SHAPLEY_VALUES']
 M = int(config['M'])
 NUM_SAMPLES = int(config['NUM_SAMPLES'])
 PARALLEL_STEPS = int(config['PARALLEL_STEPS'])
@@ -330,7 +331,6 @@ for data_index, data in enumerate(tqdm(data_list)):
         num_atoms = data["positions"].shape[1]
         num_linker_atoms = torch.sum(data["linker_mask"] == 1)
         
-        distances_random_samples = []
         hausdorff_distances_random_samples = []
 
         #DiffSHAPer application
@@ -859,13 +859,22 @@ for data_index, data in enumerate(tqdm(data_list)):
         for atom_index, phi_values in phi_atoms.items():
             phi_atoms_hausdorff[atom_index] = phi_values[0]
 
-        
+        if True:
+            sum_of_shapley_values = sum(phi_atoms_hausdorff.values())
+            average_distance_random_samples = sum(hausdorff_distances_random_samples) / len(hausdorff_distances_random_samples)
+            print("Shapley values for atoms:", phi_atoms_hausdorff)
+            print("Sum of Shapley values:", sum_of_shapley_values)
+            print("Average distance of random samples:", average_distance_random_samples)
+            print("Approximation error (abs): ", abs(sum_of_shapley_values + average_distance_random_samples))
+            print("Approximation error: ", sum_of_shapley_values + average_distance_random_samples)
+            
         # Save phi_atoms to a text file
-        with open(f'{shapley_values_save_path}/shapley_values_atoms_{data_index}.txt', 'w') as write_file:
-            write_file.write("Sample SMILES: " + str(data["name"]) + "\n")
-            write_file.write("atom_index,shapley_value\n")
-            for atom_index, phi_values in phi_atoms.items():
-                write_file.write(f"{atom_index},{phi_values[0]}\n")
+        if SAVE_SHAPLEY_VALUES:
+            with open(f'{shapley_values_save_path}/shapley_values_atoms_{data_index}.txt', 'w') as write_file:
+                write_file.write("Sample SMILES: " + str(data["name"]) + "\n")
+                write_file.write("atom_index,shapley_value\n")
+                for atom_index, phi_values in phi_atoms.items():
+                    write_file.write(f"{atom_index},{phi_values[0]}\n")
 
 
         if SAVE_VISUALIZATION:

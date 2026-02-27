@@ -79,7 +79,107 @@ def compute_hausdorff_distance_batch(mol1, mol2, mask1 = None, mask2 = None):
     return hausdorff_distances
 
 
+def compute_chamfer_distance_batch(mol1, mol2, mask1=None, mask2=None):
+    """
+    Compute the symmetric Chamfer distance between two
+    batches of molecules based on atomic positions and optional masks.
 
+    Args:
+        mol1 (torch.Tensor): Shape (batch_size, num_atoms, >=3).
+        mol2 (torch.Tensor): Shape (batch_size, num_atoms, >=3).
+        mask1 (torch.Tensor, optional): Atom mask for mol1, shape (batch_size, num_atoms).
+        mask2 (torch.Tensor, optional): Atom mask for mol2, shape (batch_size, num_atoms).
+
+    Returns:
+        list[float]: Chamfer distances for each batch element.
+    """
+    # take only xyz positions
+    mol1 = mol1[:, :, :3]
+    mol2 = mol2[:, :, :3]
+
+    if mol1.shape[0] != mol2.shape[0]:
+        raise ValueError("mol1 and mol2 must have the same batch size.")
+
+    batch_size = mol1.shape[0]
+    chamfer_distances = []
+
+    for i in range(batch_size):
+        pts1 = mol1[i]
+        pts2 = mol2[i]
+
+        if mask1 is not None:
+            pts1 = pts1[mask1[i].bool()]
+        if mask2 is not None:
+            pts2 = pts2[mask2[i].bool()]
+
+        if pts1.numel() == 0 or pts2.numel() == 0:
+            chamfer_distances.append(float("inf"))
+            continue
+
+        # pairwise Euclidean distances: [n1, n2]
+        dists = torch.cdist(pts1, pts2, p=2)
+
+        # symmetric Chamfer distance
+        d_1_to_2 = dists.min(dim=1).values.mean()
+        d_2_to_1 = dists.min(dim=0).values.mean()
+        chamfer = (d_1_to_2 + d_2_to_1).item()
+
+        chamfer_distances.append(chamfer)
+
+    return chamfer_distances
+
+
+def compute_rmsd_batch(mol1, mol2, mask1=None, mask2=None):
+    """
+    Compute RMSD for each pair of molecules in a batch.
+
+    Notes:
+        - Assumes atom correspondence by index (same atom order).
+        - RMSD requires the same number of selected atoms per pair.
+
+    Args:
+        mol1 (torch.Tensor): Shape (batch_size, num_atoms, >=3).
+        mol2 (torch.Tensor): Shape (batch_size, num_atoms, >=3).
+        mask1 (torch.Tensor, optional): Shape (batch_size, num_atoms).
+        mask2 (torch.Tensor, optional): Shape (batch_size, num_atoms).
+
+    Returns:
+        list[float]: RMSD value per batch item.
+    """
+    mol1 = mol1[:, :, :3]
+    mol2 = mol2[:, :, :3]
+
+    if mol1.shape[0] != mol2.shape[0]:
+        raise ValueError("mol1 and mol2 must have the same batch size.")
+
+    rmsd_distances = []
+    batch_size = mol1.shape[0]
+
+    for i in range(batch_size):
+        pts1 = mol1[i]
+        pts2 = mol2[i]
+
+        if mask1 is not None:
+            pts1 = pts1[mask1[i].bool()]
+        if mask2 is not None:
+            pts2 = pts2[mask2[i].bool()]
+
+        if pts1.shape[0] == 0 or pts2.shape[0] == 0:
+            rmsd_distances.append(float("inf"))
+            continue
+
+        if pts1.shape[0] != pts2.shape[0]:
+            raise ValueError(
+                f"RMSD requires same number of atoms after masking "
+                f"(batch index {i}: {pts1.shape[0]} vs {pts2.shape[0]})."
+            )
+
+        # RMSD = sqrt(mean(||p_i - q_i||^2))
+        sq_dist_per_atom = torch.sum((pts1 - pts2) ** 2, dim=1)
+        rmsd = torch.sqrt(torch.mean(sq_dist_per_atom))
+        rmsd_distances.append(rmsd.item())
+
+    return rmsd_distances
 
 # Visualize generated molecules as molecular graphs
 def visualize_mapping_structure(file_names, generation_folder, shapley_values, fragment_mask, linker_mask, save_folder, colormap = 'coolwarm_r'):

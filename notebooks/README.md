@@ -5,8 +5,14 @@
 - 📈 **shapley_value_variance_study.ipynb**  
     This notebook contains code for the study of the variance of the Shapley value approximation.
 
+- 🔄 **diffusion_explainer_chamfer_distance.ipynb** and **diffusion_explainer_rmsd.ipynb**  
+    Shapley value computation based on alternative value functions.
+
 - 📊 **shapley_value_distribution_analysis.ipynb**  
     Analysis of the distribution of the Shapley values obtained starting from different initial states as well as statistical significance analyses.
+
+- 📉 **frequency_and_statistical_analysis.ipynb**  
+    Frequency analysis of anchor and non-anchor atoms along with comparison and analysis of different value functions.
 
 - ⚓ **e3_transformation_control.ipynb**  
     Analysis of anchor and non-anchor atoms' Shapley values in presence of E(3)-transformations.

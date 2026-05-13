@@ -45,3 +45,8 @@ The folder [```notebooks```](https://github.com/AndMastro/DiffSHAPer/tree/main/n
 
 For any clarification, doubt, or curiosity, feel free to drop an [email](mailto:mastropietro@bit.uni-bonn.de).
 
+## 📃 Citation
+
+If you use our work, please cite us 😁
+
+Mastropietro Andrea & Bajorath Jürgen. Explaining a molecular diffusion model. Cell Rep Phys Sci 7, 103270, 2026.

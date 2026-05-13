@@ -49,4 +49,4 @@ For any clarification, doubt, or curiosity, feel free to drop an [email](mailto:
 
 If you use our work, please cite us 😁
 
-Mastropietro Andrea & Bajorath Jürgen. Explaining a molecular diffusion model. Cell Rep Phys Sci 7, 103270, 2026.
+Mastropietro Andrea & Bajorath Jürgen. [Explaining a molecular diffusion model](https://www.cell.com/cell-reports-physical-science/fulltext/S2666-3864(26)00176-1). Cell Rep Phys Sci 7, 103270, 2026.
